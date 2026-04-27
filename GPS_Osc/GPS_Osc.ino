@@ -23,7 +23,7 @@
 #define PWM_OUT 32 // 16bit PWM
 
 
-#define kHz(f) 1000ULL * f
+#define kHz(f) 1000ULL * (unsigned long long)f
 #define MHz(f) 1000ULL * kHz(f)
 
 const uint32_t frequency = MHz(10);
@@ -48,7 +48,8 @@ void setup(void) {
   delay(1000);
   Display.initR(INITR_BLACKTAB);    // Init ST7735S chip, black tab
   Display.fillScreen(ST77XX_BLACK);
-  testdrawtext("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur adipiscing ante sed nibh tincidunt feugiat. Maecenas enim massa, fringilla sed malesuada et, malesuada sit amet turpis. Sed porttitor neque ut ante pretium vitae malesuada nunc bibendum. Nullam aliquet ultrices massa eu hendrerit. Ut sed nisi lorem. In vestibulum purus a tortor imperdiet posuere. ", ST77XX_WHITE);
+  Display.setTextColor(ST77XX_WHITE);
+  //testdrawtext("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur adipiscing ante sed nibh tincidunt feugiat. Maecenas enim massa, fringilla sed malesuada et, malesuada sit amet turpis. Sed porttitor neque ut ante pretium vitae malesuada nunc bibendum. Nullam aliquet ultrices massa eu hendrerit. Ut sed nisi lorem. In vestibulum purus a tortor imperdiet posuere. ", ST77XX_WHITE);
   delay(1000);
   gate_open = restart = false;
   attachInterrupt(OSC_IN, On10MHz, RISING);
@@ -60,6 +61,21 @@ void setup(void) {
 
 
 void ARDUINO_ISR_ATTR OnPPS() {
+  if (restart) {
+     // not counting, waiting for restart of counter
+     clocks = 0;
+     restart = false;
+     gate_open = true;
+     }
+  else if (seconds > 0) {
+     seconds--;
+     if (seconds == 0) {
+        // 1sec duration, or last sec of several seconds
+        gate_open = false;
+        }
+     }
+
+/*
   if (seconds > 0) {
      if (seconds == 1) {
         // 1sec duration, or last sec of several seconds
@@ -70,8 +86,10 @@ void ARDUINO_ISR_ATTR OnPPS() {
   else if (restart) {
      // not counting, waiting for restart of counter
      clocks = 0;
+     restart = false;
      gate_open = true;
      }
+*/
 }
 
 void ARDUINO_ISR_ATTR On10MHz() {
@@ -82,22 +100,40 @@ void ARDUINO_ISR_ATTR On10MHz() {
 
 
 void loop() {
-  static uint32_t last_offset;
+  static int32_t last_offset;
   static int last_seconds;
+  static int num_seconds = 1;
+  static uint32_t wanted_clocks;
 
   if (seconds != last_seconds) {
      last_seconds = seconds;
-     Display.invertDisplay(last_seconds & 1 > 0);
      if (seconds == 0) {
         // timer finished.
-        uint32_t offset = clocks - frequency;
+        int32_t offset = (clocks - wanted_clocks) / num_seconds;
         if (last_offset != offset) {
            // update display.
            }
+        num_seconds = seconds = 1;
+        wanted_clocks = seconds * frequency;
+        Display.fillScreen(ST77XX_BLACK);
+        Display.setCursor(0, 0);
+        Display.print("waiting for 1PPS");
+        Display.setCursor(0, 10);
+        Display.print("offset = "); Display.print(double(offset)); Display.println(" Hz");
+
+        restart = true;
+        // for nearly one second, the gate will be closed
+        // until next 1pps arrives as a start signal.
+        return;
+        }
+     else {
+        //Display.fillScreen(ST77XX_BLACK);
+        Display.fillRect(0, 0, 128, 10, ST77XX_BLACK);
+        Display.setCursor(0, 0);
+        Display.print("waiting "); Display.print(seconds); Display.println(" second(s).");
         }
      }
-
-
+  //Serial.print("gate_open = "); Serial.println(gate_open);
   delay(100);
 }
 
@@ -108,7 +144,7 @@ void loop() {
 
 
 
-
+/*
 
 void testdrawtext(char *text, uint16_t color) {
   Display.setCursor(0, 0);
@@ -116,3 +152,4 @@ void testdrawtext(char *text, uint16_t color) {
   Display.setTextWrap(true);
   Display.print(text);
 }
+*/
