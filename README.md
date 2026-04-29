@@ -12,7 +12,11 @@ Ingredients:
 - a 10..12volts DC power supply with ~1amp continously, - no costs. Everybody has such one laying around. Preferred with the 5.5mm 'DC connector', plus is inner.
 
 
-NOTE NOTE NOTE: work in progress. Everything still changes day by day. Success is optional, this is a fully fun based project.
+***NOTE NOTE NOTE:***
+
+***This is work in progress. Everything still changes day by day. Success is optional, this is a fully fun based project.***
 
 Thoughts:
-- To be understood, do we really need an real OCXO for this, or, might a cheap second ESP32, with xtra programming do the jo of an OCXO?
+1. To be understood: Do we really need an real OCXO for this, or, might a cheap second ESP32, with xtra programming do the job of an OCXO?
+   -> Tested && understood. Not really, even the short time stability is too bad.
+2. How should i implement PWM corrections? Basic idea, the larger the offset is, the larger the steps.
