@@ -3,14 +3,25 @@
 #include <SPI.h>              // SPI(MOSI,SCK,SS) for ST7735 1.8 TFT display
 #include <Adafruit_GFX.h>     // display
 #include <Adafruit_ST7735.h>  // display
+#include "driver/pcnt.h"      // PCNT is a 16bit hardware counter on ESP32
+
+// generic macros
+#define kHz(f) 1000ULL * (unsigned long long)f
+#define MHz(f) 1000ULL * kHz(f)
+#define ARRAY_SIZE(a)  ( sizeof(a)/sizeof(a[0]) )
 
 
 
-/* Until we know anything better, we expect this to be the correct
- * Arduino IDE board:
- * "ESP32 Dev Module"
+
+
+/* In Arduino IDE, configure this board:
+ * "ESP32 Arduino -> ESP32 Dev Module"
  *
  * Now, let's declare the pins we used on the PCB.
+ *
+ * NOTE: GPIO 34,35,36,39 are input only and doent have internal pullup
+ *       resistors -> avoid those pins for the PCNT counter, as they
+ *       throw a runtime error regarding the pullup config. 
  */
 #define SS      5  // slave select, or, chip select
 #define DC      16 // data/command (DC), labeled 'AO' on TFT
@@ -18,124 +29,237 @@
 //      MOSI    23
 //      MISO    19
 //      SCK     18
-#define PPS_IN  34 // 1pps signal from GPS
-#define OSC_IN  35 // 10MHz CMOS signal from OCXO
+#define PPS_IN  35 // 1Hz signal from GPS, pin 35 supports hardware PCNT counter.
+#define OSC_IN   4 // 10MHz CMOS signal from OCXO
 #define PWM_OUT 32 // 16bit PWM
-
-
-#define kHz(f) 1000ULL * (unsigned long long)f
-#define MHz(f) 1000ULL * kHz(f)
-
-const uint32_t frequency = MHz(10);
+#define FREQUENCY      MHz(10)
+#define MAX_COUNTER   (int16_t) 30000 // 16bit signed: less or equal 32767
 
 
 Adafruit_ST7735 Display = Adafruit_ST7735(SS, DC, RST); // hardware SPI for the display.
-volatile uint32_t clocks;
-volatile bool gate_open;
-volatile bool restart;
-volatile int seconds;
+
+volatile uint32_t overflows = 0;     // increased in OnOverflow, reset in OnPPS
+volatile uint32_t lastFrequency;     // set in OnPPS
+volatile bool dataReady = false;     // set in OnPPS
+volatile uint32_t RingBuffer[16];    // ring buffer, set in OnPPS
+volatile int writeIndex = 0;         // set in OnPPS
+volatile bool secondElapsed = false; // set in OnPPS
+bool RingBufferInit = false;
+int gate_time = 10;                  // time for smoothing, up to 16
 uint16_t pwm_val;
 
-#define GATE_1SEC  1
-#define GATE_2SEC  2
-#define GATE_5SEC  5
-#define GATE_10SEC 10
 
+volatile int ov_cnt = 0; 
+// ISR: triggered every MAX_COUNTER counts by 
+void IRAM_ATTR OnOverflow(void *arg) {
+  ov_cnt++;
+  overflows++;
+  uint32_t status = 0;
+  pcnt_get_event_status(PCNT_UNIT_0, &status); // acknowledge interrupt
+}
 
+//int pps_cnt=0;
+
+// ISR: triggered every 1.0000000 Hz
+void IRAM_ATTR OnPPS() {
+  //pps_cnt++;
+  int16_t count;
+  pcnt_get_counter_value(PCNT_UNIT_0, &count);
+    
+  // Check, if a overflow interrupt is pending, that's not yet catched:
+  uint32_t status = 0;
+  pcnt_get_event_status(PCNT_UNIT_0, &status);
+  if (status & PCNT_EVT_H_LIM) {
+     // pending interrupt, read counter again (near 0 value) and add one overflow.
+     pcnt_get_counter_value(PCNT_UNIT_0, &count);
+     lastFrequency = ((overflows + 1) * MAX_COUNTER) + count;
+     }
+  else
+     lastFrequency = (overflows * MAX_COUNTER) + count;
+
+  RingBuffer[writeIndex] = lastFrequency;
+  writeIndex = (writeIndex + 1) % 16;//gate_time;
+  overflows = 0;
+  pcnt_counter_clear(PCNT_UNIT_0);
+  secondElapsed = true;
+}
 
 void setup(void) {
   Serial.begin(115200);
   delay(1000);
+
+  Display.setRotation(1);
   Display.initR(INITR_BLACKTAB);    // Init ST7735S chip, black tab
   Display.fillScreen(ST77XX_BLACK);
   Display.setTextColor(ST77XX_WHITE);
-  //testdrawtext("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Curabitur adipiscing ante sed nibh tincidunt feugiat. Maecenas enim massa, fringilla sed malesuada et, malesuada sit amet turpis. Sed porttitor neque ut ante pretium vitae malesuada nunc bibendum. Nullam aliquet ultrices massa eu hendrerit. Ut sed nisi lorem. In vestibulum purus a tortor imperdiet posuere. ", ST77XX_WHITE);
-  delay(1000);
-  gate_open = restart = false;
-  attachInterrupt(OSC_IN, On10MHz, RISING);
+
+  pinMode(OSC_IN, INPUT);
+  pinMode(PPS_IN, INPUT);
+  pinMode(PWM_OUT, OUTPUT);
+
+
+  /* setup PCNT 16-bit hardware counter
+   * NOTES:
+   * 1. The counter value is signed (-32768..32767). Therefore,
+   *    MAX_COUNTER <= 32767.
+   * 2. The PCNT noise filter runs on 80MHz, one clk is 12.5nsec;
+   *    for 10MHz the high period should be ~50nsec at 50 duty cycle.
+   *    Setting the filter higher than 4 will definitly loose all
+   *    counts, values less than 2 should be resonable.
+   */
+  pcnt_config_t pcnt_cfg = {
+     .pulse_gpio_num = OSC_IN,                // input pin
+     .ctrl_gpio_num  = -1,                    // 
+     .lctrl_mode     = PCNT_MODE_KEEP,        // 
+     .hctrl_mode     = PCNT_MODE_KEEP,        // 
+     .pos_mode       = PCNT_COUNT_INC,        // count rising edges
+     .neg_mode       = PCNT_COUNT_DIS,        // 
+     .counter_h_lim  = MAX_COUNTER,           // counter end (overflow)
+     .counter_l_lim  = 0,                     // counter begin
+     .unit           = PCNT_UNIT_0,           // 
+     .channel        = PCNT_CHANNEL_0,        // 
+     };
+  pcnt_unit_config(&pcnt_cfg);
+  pcnt_set_filter_value(PCNT_UNIT_0, 1); // running on 80MHz. 1clk = 12.5nsec
+  pcnt_filter_enable(PCNT_UNIT_0);
+  pcnt_isr_service_install(0);
+  pcnt_event_enable(PCNT_UNIT_0, PCNT_EVT_H_LIM);
+  pcnt_isr_handler_add(PCNT_UNIT_0, OnOverflow, NULL);
+  pcnt_counter_pause(PCNT_UNIT_0);
+  pcnt_counter_clear(PCNT_UNIT_0);
+  pcnt_counter_resume(PCNT_UNIT_0);
+
+  // enable 1Hz ISR
   attachInterrupt(PPS_IN, OnPPS, RISING);
-  clocks = 0;
-  seconds = GATE_1SEC;
-  pwm_val = 65353UL >> 1;
+  pwm_val = 65536UL >> 1;
 }
-
-
-void ARDUINO_ISR_ATTR OnPPS() {
-  if (restart) {
-     // not counting, waiting for restart of counter
-     clocks = 0;
-     restart = false;
-     gate_open = true;
-     }
-  else if (seconds > 0) {
-     seconds--;
-     if (seconds == 0) {
-        // 1sec duration, or last sec of several seconds
-        gate_open = false;
-        }
-     }
-
-/*
-  if (seconds > 0) {
-     if (seconds == 1) {
-        // 1sec duration, or last sec of several seconds
-        gate_open = false;
-        }
-     seconds--;
-     }
-  else if (restart) {
-     // not counting, waiting for restart of counter
-     clocks = 0;
-     restart = false;
-     gate_open = true;
-     }
-*/
-}
-
-void ARDUINO_ISR_ATTR On10MHz() {
-  if (gate_open) clocks++;
-}
-
-
 
 
 void loop() {
-  static int32_t last_offset;
-  static int last_seconds;
-  static int num_seconds = 1;
-  static uint32_t wanted_clocks;
+  //Serial.println(pps_cnt);
+  //Serial.println(overflows);
 
-  if (seconds != last_seconds) {
-     last_seconds = seconds;
-     if (seconds == 0) {
-        // timer finished.
-        int32_t offset = (clocks - wanted_clocks) / num_seconds;
-        if (last_offset != offset) {
-           // update display.
-           }
-        num_seconds = seconds = 1;
-        wanted_clocks = seconds * frequency;
-        Display.fillScreen(ST77XX_BLACK);
-        Display.setCursor(0, 0);
-        Display.print("waiting for 1PPS");
-        Display.setCursor(0, 10);
-        Display.print("offset = "); Display.print(double(offset)); Display.println(" Hz");
+  if (secondElapsed) {
+     //Serial.print("lastFrequency = "); Serial.println(lastFrequency);
+     Serial.print("writeIndex = "); Serial.println(writeIndex);
 
-        restart = true;
-        // for nearly one second, the gate will be closed
-        // until next 1pps arrives as a start signal.
-        return;
+     secondElapsed = false;
+
+     if (not RingBufferInit) {
+        RingBufferInit = true;
+        for(size_t i=1; i<ARRAY_SIZE(RingBuffer); i++)
+           RingBuffer[i] = lastFrequency;
         }
-     else {
-        //Display.fillScreen(ST77XX_BLACK);
-        Display.fillRect(0, 0, 128, 10, ST77XX_BLACK);
-        Display.setCursor(0, 0);
-        Display.print("waiting "); Display.print(seconds); Display.println(" second(s).");
+
+     uint64_t pulses = 0;
+     // ***** critical section begin: disable interrupts while copy value
+     noInterrupts();
+     for(int i=0; i<gate_time; i++) {
+        int idx = (writeIndex-1 - i + 16) % 16;
+        Serial.print("idx = "); Serial.println(idx);
+        pulses += RingBuffer[idx];
         }
-     }
-  //Serial.print("gate_open = "); Serial.println(gate_open);
-  delay(100);
-}
+     interrupts();
+     // ***** critical section end
+     Serial.print("pulses = "); Serial.println(pulses);
+
+     // we take up to (gate_time) secs samples and average
+     double frequency = ((double) pulses) / gate_time;
+     double offset = frequency - FREQUENCY;
+     double offset_ppm = (frequency - FREQUENCY) / (FREQUENCY / 1000000.0);
+
+     int new_gate_time;
+     if      (abs(offset_ppm) >  2.0) new_gate_time = 1;
+     else if (abs(offset_ppm) >= 1.5) new_gate_time = 2;
+     else                             new_gate_time = 10;
+
+     if (new_gate_time != gate_time) {
+        gate_time = new_gate_time;
+        for(int i=0; i<ARRAY_SIZE(RingBuffer); i++)
+           RingBuffer[i] = lastFrequency;
+        }
+
+     if      (offset_ppm >  2.0) new_gate_time = 1;
+     else if (offset_ppm >= 1.5) new_gate_time = 2;
+     else                        new_gate_time = 10;
+
+     int32_t next_pwm = pwm_val;
+     if      (offset_ppm >  1.0) next_pwm -= (0xFFFF / 8); // about 25% of range.
+     else if (offset_ppm < -1.0) next_pwm += (0xFFFF / 8); // about 25% of range.
+     else if (offset_ppm >  0.5) next_pwm -= (0xFFFF / 16);
+     else if (offset_ppm < -0.5) next_pwm += (0xFFFF / 16);
+     else if (offset_ppm > 0)    next_pwm -= 1;
+     else if (offset_ppm < 0)    next_pwm += 1;
+     pwm_val = constrain(next_pwm, 0, 0xFFFF);
+
+     
+     Serial.print("Gate time: ");
+     Serial.print(gate_time);
+     Serial.println("s");
+
+     Serial.print("Frequency: ");
+     Serial.print(frequency, 2); // 0.1Hz Auflösung sichtbar
+     Serial.println(" Hz");
+
+     Serial.print("Offset: ");
+     Serial.print(offset);
+     Serial.println("Hz");
+     
+
+
+
+     // --- TFT AUSGABE (QUERFORMAT) ---
+     Display.setRotation(1); // 1 = 160x128 (Landscape)
+     Display.setTextWrap(false); // Verhindert Zeilenumbruch bei Überlänge
+
+     // 1. Frequenz (Groß in der Mitte)
+     Display.setTextSize(1);
+     Display.setCursor(10, 10);
+     Display.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+     Display.println("ACTUAL FREQUENCY");
+
+     Display.setTextSize(2);
+     Display.setCursor(10, 25);
+     Display.setTextColor(ST77XX_GREEN, ST77XX_BLACK);
+    
+
+     Display.print(frequency, 1); 
+     Display.print("Hz  ");
+
+     // 2. Offset
+     Display.setTextSize(1);
+     Display.setCursor(10, 60);
+     Display.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+     Display.println("OFFSET TO 10.0 MHz");
+
+     Display.setTextSize(2);
+     Display.setCursor(10, 75);
+     if (abs(offset) < 0.1)
+        Display.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
+     else
+        Display.setTextColor(ST77XX_RED, ST77XX_BLACK);
+    
+     if (offset >= 0) Display.print("+");
+     Display.print(offset, 4); // Hier 4 Nachkommastellen für Präzision
+     Display.print("Hz      ");
+
+     // 3. Statuszeile unten
+     Display.setTextSize(1);
+     Display.setCursor(10, 110);
+     Display.setTextColor(ST77XX_YELLOW, ST77XX_BLACK);
+     if (gate_time < 10) Display.print(" ");
+     Display.print(gate_time); Display.print("sec");
+     Display.print(" | ");
+     Display.print(offset_ppm,1); Display.print("ppm");
+     Display.print(" | ");     
+     Display.print(pwm_val/655.35,1); Display.print("%            ");
+
+
+
+
+
+
+
 
 
 
@@ -145,11 +269,49 @@ void loop() {
 
 
 /*
+     Display.setTextSize(2); // 14px height, 10px width
+     Display.setCursor(0, 5);
+     Display.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+     Display.println("Frequency:");
 
-void testdrawtext(char *text, uint16_t color) {
-  Display.setCursor(0, 0);
-  Display.setTextColor(color);
-  Display.setTextWrap(true);
-  Display.print(text);
-}
+     Display.setCursor(0, 25); // Abstand für Größe 2
+     Display.setTextColor(ST77XX_GREEN, ST77XX_BLACK);
+     // Bei Größe 2 passen ca. 10-12 Zeichen pro Zeile. 
+     // "10000000.00" sind 11 Zeichen -> knapp!
+     Display.print(frequency, 2); 
+     Display.println(" Hz");
+
+    // 2. Offset (Mittlerer Bereich)
+    Display.setCursor(0, 65);
+    Display.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+    Display.println("Offset:");
+
+    Display.setCursor(0, 85);
+    if (abs(offset) < 0.1) Display.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
+    else Display.setTextColor(ST77XX_RED, ST77XX_BLACK);
+
+    if (offset >= 0) Display.print("+"); 
+    Display.print(offset, 2);
+    Display.println(" Hz  "); // Leerzeichen zum Löschen alter Reste
+
+    // 3. Gate Time (Unten)
+    Display.setCursor(0, 130);
+    Display.setTextSize(1); // Gate Time lassen wir klein, damit oben mehr Platz ist
+    Display.setTextColor(ST77XX_YELLOW, ST77XX_BLACK);
+    Display.print("Gate Time: ");
+    Display.print(gate_time);
+    Display.println("s  ");
 */
+
+//
+//      Display.fillScreen(ST77XX_BLACK);
+//      Display.setCursor(0, 0);
+//      Display.print("waiting "); Display.print(seconds); Display.println(" second(s).");
+//      Display.setCursor(0, 10);
+//      Display.print("offset = "); Display.print(offset); Display.println(" Hz");
+//
+     }
+  delay(100);
+
+}
+
