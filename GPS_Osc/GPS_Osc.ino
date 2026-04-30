@@ -4,6 +4,7 @@
 #include <Adafruit_GFX.h>     // display
 #include <Adafruit_ST7735.h>  // display
 #include "driver/pcnt.h"      // PCNT is a 16bit hardware counter on ESP32
+#include "hal/pcnt_ll.h"
 
 // generic macros
 #define kHz(f) 1000ULL * (unsigned long long)f
@@ -44,9 +45,12 @@ volatile bool dataReady = false;     // set in OnPPS
 volatile uint32_t RingBuffer[16];    // ring buffer, set in OnPPS
 volatile int writeIndex = 0;         // set in OnPPS
 volatile bool secondElapsed = false; // set in OnPPS
+         int16_t count;              // set in OnPPS
+
+volatile bool OverflowPending = false;
 bool RingBufferInit = false;
 int gate_time = 10;                  // time for smoothing, up to 16
-uint16_t pwm_val;
+uint16_t pwm_val;                    // PWM freq < (80*1000*1000)/2^Resolution; 1220Hz for 16bit.
 
 
 volatile int ov_cnt = 0; 
@@ -58,29 +62,16 @@ void IRAM_ATTR OnOverflow(void *arg) {
   pcnt_get_event_status(PCNT_UNIT_0, &status); // acknowledge interrupt
 }
 
-//int pps_cnt=0;
+
 
 // ISR: triggered every 1.0000000 Hz
 void IRAM_ATTR OnPPS() {
-  //pps_cnt++;
-  int16_t count;
-  pcnt_get_counter_value(PCNT_UNIT_0, &count);
-    
-  // Check, if a overflow interrupt is pending, that's not yet catched:
-  uint32_t status = 0;
-  pcnt_get_event_status(PCNT_UNIT_0, &status);
-  if (status & PCNT_EVT_H_LIM) {
-     // pending interrupt, read counter again (near 0 value) and add one overflow.
-     pcnt_get_counter_value(PCNT_UNIT_0, &count);
-     lastFrequency = ((overflows + 1) * MAX_COUNTER) + count;
-     }
-  else
-     lastFrequency = (overflows * MAX_COUNTER) + count;
-
+  count = pcnt_ll_get_count(PCNT_LL_GET_HW(0), 0);
+  pcnt_ll_clear_count(PCNT_LL_GET_HW(0), 0);
+  lastFrequency = (overflows * MAX_COUNTER) + count;
+  overflows = 0;
   RingBuffer[writeIndex] = lastFrequency;
   writeIndex = (writeIndex + 1) % 16;//gate_time;
-  overflows = 0;
-  pcnt_counter_clear(PCNT_UNIT_0);
   secondElapsed = true;
 }
 
@@ -141,6 +132,7 @@ void loop() {
 
   if (secondElapsed) {
      //Serial.print("lastFrequency = "); Serial.println(lastFrequency);
+     Serial.print("OverflowPending = "); Serial.println(OverflowPending);
      Serial.print("writeIndex = "); Serial.println(writeIndex);
 
      secondElapsed = false;
@@ -199,7 +191,7 @@ void loop() {
 
      Serial.print("Frequency: ");
      Serial.print(frequency, 2); // 0.1Hz Auflösung sichtbar
-     Serial.println(" Hz");
+     Serial.println(" Hz            ");
 
      Serial.print("Offset: ");
      Serial.print(offset);
@@ -234,7 +226,7 @@ void loop() {
 
      Display.setTextSize(2);
      Display.setCursor(10, 75);
-     if (abs(offset) < 0.1)
+     if (abs(offset) < 1.0)
         Display.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
      else
         Display.setTextColor(ST77XX_RED, ST77XX_BLACK);
@@ -252,7 +244,7 @@ void loop() {
      Display.print(" | ");
      Display.print(offset_ppm,1); Display.print("ppm");
      Display.print(" | ");     
-     Display.print(pwm_val/655.35,1); Display.print("%            ");
+     Display.print(pwm_val); Display.print("            ");
 
 
 
