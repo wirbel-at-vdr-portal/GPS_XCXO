@@ -11,8 +11,8 @@
 #define MHz(f) 1000ULL * kHz(f)
 #define ARRAY_SIZE(a)  ( sizeof(a)/sizeof(a[0]) )
 
-
-
+void process_loop(float f_measured);
+void apply_pwm(float estimated_f);
 
 
 /* In Arduino IDE, configure this board:
@@ -39,40 +39,34 @@
 
 Adafruit_ST7735 Display = Adafruit_ST7735(SS, DC, RST); // hardware SPI for the display.
 
+volatile uint32_t Overflows = 0;     // increased in OnOverflow, reset in OnPPS
 volatile uint32_t overflows = 0;     // increased in OnOverflow, reset in OnPPS
-volatile uint32_t lastFrequency;     // set in OnPPS
 volatile bool dataReady = false;     // set in OnPPS
-volatile uint32_t RingBuffer[16];    // ring buffer, set in OnPPS
-volatile int writeIndex = 0;         // set in OnPPS
-volatile bool secondElapsed = false; // set in OnPPS
-         int16_t count;              // set in OnPPS
+volatile int32_t ticks = 0;
+volatile bool data_ready = false;    // set in OnPPS
+volatile int32_t count;              // set in OnPPS
+volatile int32_t count_tmp;          // set in OnPPS, remember the current clocks as fast as possible.
 
-volatile bool OverflowPending = false;
-bool RingBufferInit = false;
 int gate_time = 10;                  // time for smoothing, up to 16
-uint16_t pwm_val;                    // PWM freq < (80*1000*1000)/2^Resolution; 1220Hz for 16bit.
+uint32_t pwm_val;                    // PWM freq < (80*1000*1000)/2^Resolution; 1220Hz for 16bit.
+uint32_t pwm_frequency = 1220;
 
-
-volatile int ov_cnt = 0; 
 // ISR: triggered every MAX_COUNTER counts by 
 void IRAM_ATTR OnOverflow(void *arg) {
-  ov_cnt++;
-  overflows++;
-  uint32_t status = 0;
-  pcnt_get_event_status(PCNT_UNIT_0, &status); // acknowledge interrupt
+  Overflows++;
+  PCNT.int_clr.val = BIT(0); // acknowledge interrupt
 }
-
-
 
 // ISR: triggered every 1.0000000 Hz
 void IRAM_ATTR OnPPS() {
-  count = pcnt_ll_get_count(PCNT_LL_GET_HW(0), 0);
+  count_tmp = pcnt_ll_get_count(PCNT_LL_GET_HW(0), 0);
+  if (--ticks > 0) return;
   pcnt_ll_clear_count(PCNT_LL_GET_HW(0), 0);
-  lastFrequency = (overflows * MAX_COUNTER) + count;
-  overflows = 0;
-  RingBuffer[writeIndex] = lastFrequency;
-  writeIndex = (writeIndex + 1) % 16;//gate_time;
-  secondElapsed = true;
+  ticks = 1000000; // actually disabled. will be updated by loop()
+  count = count_tmp;
+  overflows = Overflows;
+  Overflows = 0;
+  data_ready = true;
 }
 
 void setup(void) {
@@ -123,57 +117,41 @@ void setup(void) {
   // enable 1Hz ISR
   attachInterrupt(PPS_IN, OnPPS, RISING);
   pwm_val = 65536UL >> 1;
+
+  if (not(ledcAttach(PWM_OUT, pwm_frequency, 16)))
+     Serial.println("ledcAttach failed.");
+  else {
+     pwm_frequency = ledcReadFreq(PWM_OUT);
+     Serial.print("PWM started, freq = "); Serial.println(pwm_frequency);
+     ledcWrite(PWM_OUT, pwm_val);
+     }
 }
 
 
+uint64_t pulses = 0;
+double frequency;
+double offset;
+double offset_ppm;
+int last_ticks;
+
+
 void loop() {
-  //Serial.println(pps_cnt);
-  //Serial.println(overflows);
+  if (data_ready) {
 
-  if (secondElapsed) {
-     //Serial.print("lastFrequency = "); Serial.println(lastFrequency);
-     Serial.print("OverflowPending = "); Serial.println(OverflowPending);
-     Serial.print("writeIndex = "); Serial.println(writeIndex);
-
-     secondElapsed = false;
-
-     if (not RingBufferInit) {
-        RingBufferInit = true;
-        for(size_t i=1; i<ARRAY_SIZE(RingBuffer); i++)
-           RingBuffer[i] = lastFrequency;
-        }
-
-     uint64_t pulses = 0;
      // ***** critical section begin: disable interrupts while copy value
      noInterrupts();
-     for(int i=0; i<gate_time; i++) {
-        int idx = (writeIndex-1 - i + 16) % 16;
-        Serial.print("idx = "); Serial.println(idx);
-        pulses += RingBuffer[idx];
-        }
+     data_ready = false;
+     pulses = overflows * MAX_COUNTER + count;
      interrupts();
      // ***** critical section end
+
      Serial.print("pulses = "); Serial.println(pulses);
 
      // we take up to (gate_time) secs samples and average
-     double frequency = ((double) pulses) / gate_time;
-     double offset = frequency - FREQUENCY;
-     double offset_ppm = (frequency - FREQUENCY) / (FREQUENCY / 1000000.0);
+     frequency = ((double) pulses) / gate_time;
+     offset = frequency - FREQUENCY;
+     offset_ppm = (frequency - FREQUENCY) / (FREQUENCY / 1000000.0);
 
-     int new_gate_time;
-     if      (abs(offset_ppm) >  2.0) new_gate_time = 1;
-     else if (abs(offset_ppm) >= 1.5) new_gate_time = 2;
-     else                             new_gate_time = 10;
-
-     if (new_gate_time != gate_time) {
-        gate_time = new_gate_time;
-        for(int i=0; i<ARRAY_SIZE(RingBuffer); i++)
-           RingBuffer[i] = lastFrequency;
-        }
-
-     if      (offset_ppm >  2.0) new_gate_time = 1;
-     else if (offset_ppm >= 1.5) new_gate_time = 2;
-     else                        new_gate_time = 10;
 
      int32_t next_pwm = pwm_val;
      if      (offset_ppm >  1.0) next_pwm -= (0xFFFF / 8); // about 25% of range.
@@ -182,9 +160,10 @@ void loop() {
      else if (offset_ppm < -0.5) next_pwm += (0xFFFF / 16);
      else if (offset_ppm > 0)    next_pwm -= 1;
      else if (offset_ppm < 0)    next_pwm += 1;
-     pwm_val = constrain(next_pwm, 0, 0xFFFF);
+     pwm_val = constrain(next_pwm, 0, (1UL<<16UL)-1UL);
+     ledcWrite(PWM_OUT, pwm_val);
 
-     
+
      Serial.print("Gate time: ");
      Serial.print(gate_time);
      Serial.println("s");
@@ -216,7 +195,7 @@ void loop() {
     
 
      Display.print(frequency, 1); 
-     Display.print("Hz  ");
+     Display.print("Hz              ");
 
      // 2. Offset
      Display.setTextSize(1);
@@ -232,8 +211,15 @@ void loop() {
         Display.setTextColor(ST77XX_RED, ST77XX_BLACK);
     
      if (offset >= 0) Display.print("+");
-     Display.print(offset, 4); // Hier 4 Nachkommastellen für Präzision
+     Display.print(offset, 2); // Hier 4 Nachkommastellen für Präzision
      Display.print("Hz      ");
+
+
+     if      (abs(offset_ppm) >  2.0) gate_time = 1;
+     else if (abs(offset_ppm) >= 1.5) gate_time = 10;
+     else                             gate_time = 100;
+     ticks = gate_time;
+
 
      // 3. Statuszeile unten
      Display.setTextSize(1);
@@ -245,65 +231,103 @@ void loop() {
      Display.print(offset_ppm,1); Display.print("ppm");
      Display.print(" | ");     
      Display.print(pwm_val); Display.print("            ");
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/*
-     Display.setTextSize(2); // 14px height, 10px width
-     Display.setCursor(0, 5);
-     Display.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
-     Display.println("Frequency:");
-
-     Display.setCursor(0, 25); // Abstand für Größe 2
-     Display.setTextColor(ST77XX_GREEN, ST77XX_BLACK);
-     // Bei Größe 2 passen ca. 10-12 Zeichen pro Zeile. 
-     // "10000000.00" sind 11 Zeichen -> knapp!
-     Display.print(frequency, 2); 
-     Display.println(" Hz");
-
-    // 2. Offset (Mittlerer Bereich)
-    Display.setCursor(0, 65);
-    Display.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
-    Display.println("Offset:");
-
-    Display.setCursor(0, 85);
-    if (abs(offset) < 0.1) Display.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
-    else Display.setTextColor(ST77XX_RED, ST77XX_BLACK);
-
-    if (offset >= 0) Display.print("+"); 
-    Display.print(offset, 2);
-    Display.println(" Hz  "); // Leerzeichen zum Löschen alter Reste
-
-    // 3. Gate Time (Unten)
-    Display.setCursor(0, 130);
-    Display.setTextSize(1); // Gate Time lassen wir klein, damit oben mehr Platz ist
-    Display.setTextColor(ST77XX_YELLOW, ST77XX_BLACK);
-    Display.print("Gate Time: ");
-    Display.print(gate_time);
-    Display.println("s  ");
-*/
-
-//
-//      Display.fillScreen(ST77XX_BLACK);
-//      Display.setCursor(0, 0);
-//      Display.print("waiting "); Display.print(seconds); Display.println(" second(s).");
-//      Display.setCursor(0, 10);
-//      Display.print("offset = "); Display.print(offset); Display.println(" Hz");
-//
+     }
+  else if (last_ticks != ticks) {
+     Display.setRotation(1); // 1 = 160x128 (Landscape)
+     Display.setTextWrap(false); // Verhindert Zeilenumbruch bei Überlänge
+     Display.setTextSize(1);
+     Display.setCursor(10, 110);
+     Display.setTextColor(ST77XX_YELLOW, ST77XX_BLACK);
+     if (gate_time < 10) Display.print(" ");
+     Display.print(ticks+1); Display.print("sec");
+     Display.print(" | ");
+     Display.print(offset_ppm,1); Display.print("ppm");
+     Display.print(" | ");     
+     Display.print(pwm_val); Display.print("            ");
      }
   delay(100);
 
 }
+
+
+
+
+
+
+
+
+
+
+
+// Zeitstempel für Timeout
+uint32_t last_pps_time = 0;
+bool holdover_active = false;
+
+// Schwellenwert für Plausibilität (z.B. max. 10 Hz Abweichung vom Erwartungswert)
+const float MAX_INNOVATION = 10.0; 
+const uint32_t PPS_TIMEOUT_MS = 2000; // 2 Sekunden ohne PPS -> Holdover
+
+void process_loop(float f_measured) {
+  uint32_t now = millis();
+  float dt = (now - last_pps_time) / 1000.0;
+
+  // 1. Prädiktion (Immer ausführen, um den Zustand fortzuführen)
+  f = f + d * dt;
+  // ... (Unsicherheits-Update P00, P01, P10, P11 wie im 2D-Modell)
+    P00 += dt * (dt * P11 + P01 + P10) + Q_f;
+    P01 += dt * P11;
+    P10 += dt * P11;
+    P11 += Q_d;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  // Prüfen, ob ein gültiges PPS-Signal vorliegt
+  float innovation = abs(f_measured - f);
+    
+  if (now - last_pps_time < PPS_TIMEOUT_MS && innovation < MAX_INNOVATION) {
+     // --- NORMALBETRIEB: Update mit Messung ---
+     holdover_active = false;
+        
+     float S = P00 + R_m;
+     float K0 = P00 / S;
+     float K1 = P10 / S;
+
+     f += K0 * (f_measured - f);
+     d += K1 * (f_measured - f);
+        
+     // ... (P-Matrix Update wie oben)
+        
+    last_pps_time = now;
+    } else {
+        // --- HOLDOVER: Nur Vorhersage nutzen ---
+        holdover_active = true;
+        // Wir korrigieren f und d NICHT mit der Messung.
+        // P (Unsicherheit) wächst automatisch weiter an, da Q addiert wird.
+    }
+
+    // PWM Ausgabe basierend auf der aktuellen Schätzung f
+    apply_pwm(f);
+}
+
+
+void apply_pwm(float estimated_f) {
+  float target_pwm = CENTER_PWM + (estimated_f * STEPS_PER_HZ);
+  ledcWrite(0, (uint32_t)constrain(target_pwm, 0, 65535));
+}
+
+
+
+
+
 
