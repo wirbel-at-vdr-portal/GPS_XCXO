@@ -6,7 +6,7 @@
 <setting alwaysvectorfont="no"/>
 <setting verticaltext="up"/>
 </settings>
-<grid distance="0.1" unitdist="inch" unit="inch" style="lines" multiple="1" display="no" altdistance="0.01" altunitdist="inch" altunit="inch"/>
+<grid distance="25" unitdist="mil" unit="mil" style="lines" multiple="1" display="no" altdistance="0.01" altunitdist="inch" altunit="inch"/>
 <layers>
 <layer number="1" name="Top" color="4" fill="1" visible="no" active="no"/>
 <layer number="16" name="Bottom" color="1" fill="1" visible="no" active="no"/>
@@ -16639,7 +16639,7 @@ sine wave</text>
 <attribute name="NAME" x="-9.525" y="95.25" size="1.778" layer="95" rot="R270"/>
 <attribute name="VALUE" x="-10.16" y="87.63" size="1.778" layer="96" rot="R90"/>
 </instance>
-<instance part="U$4" gate="G$1" x="17.78" y="60.96"/>
+<instance part="U$4" gate="G$1" x="19.05" y="60.96"/>
 <instance part="SUPPLY30" gate="GND" x="-2.54" y="50.8" rot="R270"/>
 <instance part="R2" gate="G$1" x="-63.5" y="-7.62"/>
 <instance part="R5" gate="G$1" x="-76.2" y="-7.62"/>
@@ -16747,6 +16747,7 @@ sine wave</text>
 <segment>
 <pinref part="U$4" gate="G$1" pin="GND"/>
 <pinref part="SUPPLY30" gate="GND" pin="GND"/>
+<wire x1="1.27" y1="50.8" x2="0" y2="50.8" width="0.1524" layer="91"/>
 </segment>
 <segment>
 <pinref part="SUPPLY10" gate="GND" pin="GND"/>
@@ -16774,7 +16775,7 @@ sine wave</text>
 <junction x="-48.26" y="96.52"/>
 <label x="-12.7" y="71.12" size="1.778" layer="95"/>
 <pinref part="U$4" gate="G$1" pin="35"/>
-<wire x1="0" y1="71.12" x2="-15.24" y2="71.12" width="0.1524" layer="91"/>
+<wire x1="1.27" y1="71.12" x2="-15.24" y2="71.12" width="0.1524" layer="91"/>
 <wire x1="-15.24" y1="71.12" x2="-15.24" y2="76.2" width="0.1524" layer="91"/>
 <wire x1="-15.24" y1="76.2" x2="-35.56" y2="76.2" width="0.1524" layer="91"/>
 <wire x1="-35.56" y1="76.2" x2="-35.56" y2="96.52" width="0.1524" layer="91"/>
@@ -16788,10 +16789,14 @@ sine wave</text>
 <pinref part="IC1" gate="B" pin="I"/>
 <wire x1="-53.34" y1="73.66" x2="-53.34" y2="50.8" width="0.1524" layer="91"/>
 <wire x1="-53.34" y1="50.8" x2="-58.42" y2="50.8" width="0.1524" layer="91"/>
-<wire x1="0" y1="73.66" x2="-53.34" y2="73.66" width="0.1524" layer="91"/>
 <junction x="-53.34" y="73.66"/>
-<label x="-12.7" y="73.66" size="1.778" layer="95"/>
-<pinref part="U$4" gate="G$1" pin="34"/>
+<label x="-38.1" y="73.66" size="1.778" layer="95"/>
+<wire x1="-5.08" y1="73.66" x2="-53.34" y2="73.66" width="0.1524" layer="91"/>
+<wire x1="22.86" y1="53.34" x2="22.86" y2="30.48" width="0.1524" layer="91"/>
+<wire x1="22.86" y1="30.48" x2="-5.08" y2="30.48" width="0.1524" layer="91"/>
+<wire x1="-5.08" y1="30.48" x2="-5.08" y2="73.66" width="0.1524" layer="91"/>
+<wire x1="31.75" y1="53.34" x2="22.86" y2="53.34" width="0.1524" layer="91"/>
+<pinref part="U$4" gate="G$1" pin="4"/>
 </segment>
 </net>
 <net name="N$2" class="0">
@@ -16828,7 +16833,7 @@ sine wave</text>
 <junction x="144.78" y="93.98"/>
 </segment>
 <segment>
-<wire x1="0" y1="38.1" x2="-5.08" y2="38.1" width="0.1524" layer="91"/>
+<wire x1="1.27" y1="38.1" x2="-5.08" y2="38.1" width="0.1524" layer="91"/>
 <label x="-5.08" y="38.1" size="1.778" layer="95"/>
 <pinref part="U$4" gate="G$1" pin="5V"/>
 </segment>
@@ -16939,7 +16944,7 @@ sine wave</text>
 <label x="96.52" y="10.16" size="1.778" layer="95"/>
 </segment>
 <segment>
-<wire x1="0" y1="83.82" x2="-5.08" y2="83.82" width="0.1524" layer="91"/>
+<wire x1="1.27" y1="83.82" x2="-5.08" y2="83.82" width="0.1524" layer="91"/>
 <label x="-5.08" y="83.82" size="1.778" layer="95"/>
 <pinref part="U$4" gate="G$1" pin="3V3"/>
 </segment>
@@ -16951,7 +16956,7 @@ sine wave</text>
 <wire x1="101.6" y1="15.24" x2="91.44" y2="15.24" width="0.1524" layer="91"/>
 </segment>
 <segment>
-<wire x1="40.64" y1="63.5" x2="30.48" y2="63.5" width="0.1524" layer="91"/>
+<wire x1="40.64" y1="63.5" x2="31.75" y2="63.5" width="0.1524" layer="91"/>
 <label x="33.02" y="63.5" size="1.778" layer="95"/>
 <pinref part="U$4" gate="G$1" pin="18"/>
 </segment>
@@ -16963,7 +16968,7 @@ sine wave</text>
 <wire x1="101.6" y1="20.32" x2="91.44" y2="20.32" width="0.1524" layer="91"/>
 </segment>
 <segment>
-<wire x1="40.64" y1="81.28" x2="30.48" y2="81.28" width="0.1524" layer="91"/>
+<wire x1="40.64" y1="81.28" x2="31.75" y2="81.28" width="0.1524" layer="91"/>
 <label x="33.02" y="81.28" size="1.778" layer="95"/>
 <pinref part="U$4" gate="G$1" pin="23"/>
 </segment>
@@ -16975,7 +16980,7 @@ sine wave</text>
 <label x="93.98" y="30.48" size="1.778" layer="95"/>
 </segment>
 <segment>
-<wire x1="30.48" y1="58.42" x2="40.64" y2="58.42" width="0.1524" layer="91"/>
+<wire x1="31.75" y1="58.42" x2="40.64" y2="58.42" width="0.1524" layer="91"/>
 <label x="33.02" y="58.42" size="1.778" layer="95"/>
 <pinref part="U$4" gate="G$1" pin="17"/>
 </segment>
@@ -16987,7 +16992,7 @@ sine wave</text>
 <label x="93.98" y="25.4" size="1.778" layer="95"/>
 </segment>
 <segment>
-<wire x1="30.48" y1="55.88" x2="40.64" y2="55.88" width="0.1524" layer="91"/>
+<wire x1="31.75" y1="55.88" x2="40.64" y2="55.88" width="0.1524" layer="91"/>
 <label x="33.02" y="55.88" size="1.778" layer="95"/>
 <pinref part="U$4" gate="G$1" pin="16"/>
 </segment>
@@ -16999,7 +17004,7 @@ sine wave</text>
 <wire x1="91.44" y1="35.56" x2="101.6" y2="35.56" width="0.1524" layer="91"/>
 </segment>
 <segment>
-<wire x1="30.48" y1="60.96" x2="40.64" y2="60.96" width="0.1524" layer="91"/>
+<wire x1="31.75" y1="60.96" x2="40.64" y2="60.96" width="0.1524" layer="91"/>
 <label x="33.02" y="60.96" size="1.778" layer="95"/>
 <pinref part="U$4" gate="G$1" pin="5"/>
 </segment>
@@ -17015,7 +17020,7 @@ sine wave</text>
 <segment>
 <pinref part="JP6" gate="G$1" pin="1"/>
 <pinref part="U$4" gate="G$1" pin="EN"/>
-<wire x1="0" y1="81.28" x2="-12.7" y2="81.28" width="0.1524" layer="91"/>
+<wire x1="1.27" y1="81.28" x2="-12.7" y2="81.28" width="0.1524" layer="91"/>
 </segment>
 </net>
 <net name="PWM_OUT" class="0">
@@ -17023,7 +17028,7 @@ sine wave</text>
 <pinref part="IC1" gate="E" pin="I"/>
 <wire x1="-15.24" y1="66.04" x2="-15.24" y2="68.58" width="0.1524" layer="91"/>
 <pinref part="U$4" gate="G$1" pin="32"/>
-<wire x1="-15.24" y1="68.58" x2="0" y2="68.58" width="0.1524" layer="91"/>
+<wire x1="-15.24" y1="68.58" x2="1.27" y2="68.58" width="0.1524" layer="91"/>
 <label x="-12.7" y="68.58" size="1.778" layer="95"/>
 </segment>
 </net>
