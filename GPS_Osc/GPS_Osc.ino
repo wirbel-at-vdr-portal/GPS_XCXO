@@ -1,21 +1,26 @@
+/*******************************************************************************
+ * Project Page: https://github.com/wirbel-at-vdr-portal/GPS_XCXO
+ ******************************************************************************/
 #include <Arduino.h>
 #include <stdint.h>           // uint16_t, uint32_t
+#include <atomic>
 #include <SPI.h>              // SPI(MOSI,SCK,SS) for ST7735 1.8 TFT display
 #include <Adafruit_GFX.h>     // display
 #include <Adafruit_ST7735.h>  // display
-#include "driver/pcnt.h"      // PCNT is a 16bit hardware counter on ESP32
+//#include "driver/pcnt.h"
+#include "driver/pulse_cnt.h"   // PCNT is a 16bit hardware counter on ESP32
 #include "hal/pcnt_ll.h"
+#include "Kalman_Filter.h"
+#include "esp32-hal-cpu.h"
+#include "soc/pcnt_reg.h"
 
 // generic macros
 #define kHz(f) 1000ULL * (unsigned long long)f
 #define MHz(f) 1000ULL * kHz(f)
 #define ARRAY_SIZE(a)  ( sizeof(a)/sizeof(a[0]) )
 
-void process_loop(float f_measured);
-void apply_pwm(float estimated_f);
 
-
-/* In Arduino IDE, configure this board:
+/* In the Arduino IDE, configure this board:
  * "ESP32 Arduino -> ESP32 Dev Module"
  *
  * Now, let's declare the pins we used on the PCB.
@@ -36,40 +41,81 @@ void apply_pwm(float estimated_f);
 #define FREQUENCY      MHz(10)
 #define MAX_COUNTER   (int16_t) 30000 // 16bit signed: less or equal 32767
 
+pcnt_unit_handle_t pcnt_unit = NULL;
 
-Adafruit_ST7735 Display = Adafruit_ST7735(SS, DC, RST); // hardware SPI for the display.
+// our 1.8 ST7735 based TFT, connected to hw  SPI
+Adafruit_ST7735 Display = Adafruit_ST7735(SS, DC, RST);
 
-volatile uint32_t Overflows = 0;     // increased in OnOverflow, reset in OnPPS
-volatile uint32_t overflows = 0;     // increased in OnOverflow, reset in OnPPS
-volatile bool dataReady = false;     // set in OnPPS
-volatile int32_t ticks = 0;
-volatile bool data_ready = false;    // set in OnPPS
-volatile int32_t count;              // set in OnPPS
-volatile int32_t count_tmp;          // set in OnPPS, remember the current clocks as fast as possible.
 
-int gate_time = 10;                  // time for smoothing, up to 16
+/* grouping all ISR related variables increases the chance, that our compiler
+ * can optimise our code better by using short jumps on access.
+ */
+struct ISR_Data {
+  int32_t ticks;       // set in OnPPS
+  uint32_t Overflows;  // increased in OnOverflow, reset in OnPPS
+  uint32_t overflows;  // increased in OnOverflow, reset in OnPPS
+  int32_t count_tmp;   // set in OnPPS, remember the current clocks as fast as possible.
+  int32_t count;       // set in OnPPS
+  uint32_t ready;      // set in OnPPS
+  uint32_t isr_duration;  // debug only.
+} __attribute__((aligned(4)));
+
+volatile ISR_Data isr_data = {0, 0, 0, 0, 0, 0, 0};
+
+
+
+int gate_time = 10;                  // time for smoothing, up to 100, may be later larger.
 uint32_t pwm_val;                    // PWM freq < (80*1000*1000)/2^Resolution; 1220Hz for 16bit.
 uint32_t pwm_frequency = 1220;
 
-// ISR: triggered every MAX_COUNTER counts by 
-void IRAM_ATTR OnOverflow(void *arg) {
-  Overflows++;
-  PCNT.int_clr.val = BIT(0); // acknowledge interrupt
+//void IRAM_ATTR OnOverflow(void *arg) {
+
+/* to count cpu clocks, we have a xtal counter available:
+uint32_t start = xthal_get_ccount();
+uint32_t end   = xthal_get_ccount();
+isr_duration = end - start;
+*/
+
+// ISR: triggered every MAX_COUNTER counts by PCNT
+static bool IRAM_ATTR OnOverflow(pcnt_unit_handle_t unit, const pcnt_watch_event_data_t* edata, void* user_ctx) {
+  isr_data.Overflows = isr_data.Overflows + 1;   // warning on ++ operator
+  //PCNT.int_clr.val = BIT(0);                   // acknowledge interrupt
+  *(volatile uint32_t*)(PCNT_INT_CLR_REG) = 1UL; // acknowledge interrupt
+  return false; // no context switch.
 }
 
 // ISR: triggered every 1.0000000 Hz
 void IRAM_ATTR OnPPS() {
-  count_tmp = pcnt_ll_get_count(PCNT_LL_GET_HW(0), 0);
-  if (--ticks > 0) return;
-  pcnt_ll_clear_count(PCNT_LL_GET_HW(0), 0);
-  ticks = 1000000; // actually disabled. will be updated by loop()
-  count = count_tmp;
-  overflows = Overflows;
-  Overflows = 0;
-  data_ready = true;
+  // NOTE:
+  //  - slower, but identical: count_tmp = pcnt_ll_get_count(PCNT_LL_GET_HW(0), 0);
+  //  - PCNT_U0_CNT_REG is the PCNT counter value for unit 0
+  isr_data.count_tmp = *(volatile int16_t*) (PCNT_U0_CNT_REG); // 16-Bit register, therefore the cast.
+
+
+  isr_data.ticks = isr_data.ticks - 1;
+  if (isr_data.ticks > 0) return;
+
+  // NOTE:
+  //  - slower, but identical: pcnt_ll_clear_count(PCNT_LL_GET_HW(0), 0);
+  //  - toggling the reset bit in the counter config resets the counter to zero.
+
+  *(volatile uint32_t*)(PCNT_U0_CONF0_REG) |=  PCNT_PLUS_CNT_RST_U0;
+  *(volatile uint32_t*)(PCNT_U0_CONF0_REG) &= ~PCNT_PLUS_CNT_RST_U0;
+
+
+  isr_data.overflows = isr_data.Overflows;
+  isr_data.Overflows = 0;
+  isr_data.ticks = 1000000; // actually disabled. will be updated by loop()
+  isr_data.count = isr_data.count_tmp;
+  isr_data.ready = 1;
 }
 
 void setup(void) {
+  uint32_t currentFreq = getCpuFrequencyMhz();
+  if (currentFreq != 240) {
+     setCpuFrequencyMhz(240);
+     }
+
   Serial.begin(115200);
   delay(1000);
 
@@ -91,7 +137,33 @@ void setup(void) {
    *    for 10MHz the high period should be ~50nsec at 50 duty cycle.
    *    Setting the filter higher than 4 will definitly loose all
    *    counts, values less than 2 should be resonable.
+   * 3. This is the newer version of the PCNT api.
    */
+
+  pcnt_unit_config_t unit_config = {
+     .low_limit = 0,
+     .high_limit = (int16_t)MAX_COUNTER,
+     //.flags = { .accum_count = true }
+     };
+  pcnt_new_unit(&unit_config, &pcnt_unit);
+  pcnt_glitch_filter_config_t filter_config = {.max_glitch_ns = 13,}; // 13nsec. 1/80MHz = 12.5nsec
+  pcnt_unit_set_glitch_filter(pcnt_unit, &filter_config);
+  pcnt_chan_config_t chan_config = {.edge_gpio_num = OSC_IN, .level_gpio_num = -1,};
+  pcnt_channel_handle_t pcnt_chan = NULL;
+  pcnt_new_channel(pcnt_unit, &chan_config, &pcnt_chan);
+  pcnt_channel_set_edge_action(pcnt_chan,
+     PCNT_CHANNEL_EDGE_ACTION_INCREASE, // on rising edge increase
+     PCNT_CHANNEL_EDGE_ACTION_HOLD);    // on falling edge no action.
+  pcnt_event_callbacks_t cbs = { .on_reach = OnOverflow,};
+  pcnt_unit_register_event_callbacks(pcnt_unit, &cbs, NULL);
+  pcnt_unit_add_watch_point(pcnt_unit, MAX_COUNTER);
+  pcnt_unit_enable(pcnt_unit);
+  pcnt_unit_clear_count(pcnt_unit);
+  pcnt_unit_start(pcnt_unit);
+
+
+
+  /*
   pcnt_config_t pcnt_cfg = {
      .pulse_gpio_num = OSC_IN,                // input pin
      .ctrl_gpio_num  = -1,                    // 
@@ -113,6 +185,7 @@ void setup(void) {
   pcnt_counter_pause(PCNT_UNIT_0);
   pcnt_counter_clear(PCNT_UNIT_0);
   pcnt_counter_resume(PCNT_UNIT_0);
+  */
 
   // enable 1Hz ISR
   attachInterrupt(PPS_IN, OnPPS, RISING);
@@ -136,14 +209,14 @@ int last_ticks;
 
 
 void loop() {
-  if (data_ready) {
 
+  if (isr_data.ready == 1) {
      // ***** critical section begin: disable interrupts while copy value
      noInterrupts();
-     data_ready = false;
-     pulses = overflows * MAX_COUNTER + count;
+     pulses = isr_data.overflows * MAX_COUNTER + isr_data.count;
      interrupts();
      // ***** critical section end
+     isr_data.ready = 0;
 
      Serial.print("pulses = "); Serial.println(pulses);
 
@@ -152,15 +225,7 @@ void loop() {
      offset = frequency - FREQUENCY;
      offset_ppm = (frequency - FREQUENCY) / (FREQUENCY / 1000000.0);
 
-
-     int32_t next_pwm = pwm_val;
-     if      (offset_ppm >  1.0) next_pwm -= (0xFFFF / 8); // about 25% of range.
-     else if (offset_ppm < -1.0) next_pwm += (0xFFFF / 8); // about 25% of range.
-     else if (offset_ppm >  0.5) next_pwm -= (0xFFFF / 16);
-     else if (offset_ppm < -0.5) next_pwm += (0xFFFF / 16);
-     else if (offset_ppm > 0)    next_pwm -= 1;
-     else if (offset_ppm < 0)    next_pwm += 1;
-     pwm_val = constrain(next_pwm, 0, (1UL<<16UL)-1UL);
+     pwm_val = kalman_filter(frequency, gate_time);
      ledcWrite(PWM_OUT, pwm_val);
 
 
@@ -179,49 +244,41 @@ void loop() {
 
 
 
-     // --- TFT AUSGABE (QUERFORMAT) ---
+     // --- TFT output ---
      Display.setRotation(1); // 1 = 160x128 (Landscape)
      Display.setTextWrap(false); // Verhindert Zeilenumbruch bei Überlänge
 
-     // 1. Frequenz (Groß in der Mitte)
+     // 1. frequency
      Display.setTextSize(1);
      Display.setCursor(10, 10);
      Display.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
      Display.println("ACTUAL FREQUENCY");
-
      Display.setTextSize(2);
      Display.setCursor(10, 25);
      Display.setTextColor(ST77XX_GREEN, ST77XX_BLACK);
-    
-
      Display.print(frequency, 1); 
      Display.print("Hz              ");
 
-     // 2. Offset
+     // 2. offset
      Display.setTextSize(1);
      Display.setCursor(10, 60);
      Display.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
      Display.println("OFFSET TO 10.0 MHz");
-
      Display.setTextSize(2);
      Display.setCursor(10, 75);
-     if (abs(offset) < 1.0)
-        Display.setTextColor(ST77XX_CYAN, ST77XX_BLACK);
-     else
-        Display.setTextColor(ST77XX_RED, ST77XX_BLACK);
-    
+     Display.setTextColor((abs(offset) < 1.0) ? ST77XX_CYAN : ST77XX_RED, ST77XX_BLACK);   
      if (offset >= 0) Display.print("+");
-     Display.print(offset, 2); // Hier 4 Nachkommastellen für Präzision
+     Display.print(offset, 3);
      Display.print("Hz      ");
 
 
      if      (abs(offset_ppm) >  2.0) gate_time = 1;
      else if (abs(offset_ppm) >= 1.5) gate_time = 10;
      else                             gate_time = 100;
-     ticks = gate_time;
+     isr_data.ticks = gate_time;
 
 
-     // 3. Statuszeile unten
+     // 3. status bar
      Display.setTextSize(1);
      Display.setCursor(10, 110);
      Display.setTextColor(ST77XX_YELLOW, ST77XX_BLACK);
@@ -232,21 +289,20 @@ void loop() {
      Display.print(" | ");     
      Display.print(pwm_val); Display.print("            ");
      }
-  else if (last_ticks != ticks) {
+  else if (last_ticks != isr_data.ticks) {
      Display.setRotation(1); // 1 = 160x128 (Landscape)
      Display.setTextWrap(false); // Verhindert Zeilenumbruch bei Überlänge
      Display.setTextSize(1);
      Display.setCursor(10, 110);
      Display.setTextColor(ST77XX_YELLOW, ST77XX_BLACK);
      if (gate_time < 10) Display.print(" ");
-     Display.print(ticks+1); Display.print("sec");
+     Display.print(isr_data.ticks+1); Display.print("sec");
      Display.print(" | ");
      Display.print(offset_ppm,1); Display.print("ppm");
      Display.print(" | ");     
      Display.print(pwm_val); Display.print("            ");
      }
   delay(100);
-
 }
 
 
@@ -256,75 +312,6 @@ void loop() {
 
 
 
-
-
-
-// Zeitstempel für Timeout
-uint32_t last_pps_time = 0;
-bool holdover_active = false;
-
-// Schwellenwert für Plausibilität (z.B. max. 10 Hz Abweichung vom Erwartungswert)
-const float MAX_INNOVATION = 10.0; 
-const uint32_t PPS_TIMEOUT_MS = 2000; // 2 Sekunden ohne PPS -> Holdover
-
-void process_loop(float f_measured) {
-  uint32_t now = millis();
-  float dt = (now - last_pps_time) / 1000.0;
-
-  // 1. Prädiktion (Immer ausführen, um den Zustand fortzuführen)
-  f = f + d * dt;
-  // ... (Unsicherheits-Update P00, P01, P10, P11 wie im 2D-Modell)
-    P00 += dt * (dt * P11 + P01 + P10) + Q_f;
-    P01 += dt * P11;
-    P10 += dt * P11;
-    P11 += Q_d;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  // Prüfen, ob ein gültiges PPS-Signal vorliegt
-  float innovation = abs(f_measured - f);
-    
-  if (now - last_pps_time < PPS_TIMEOUT_MS && innovation < MAX_INNOVATION) {
-     // --- NORMALBETRIEB: Update mit Messung ---
-     holdover_active = false;
-        
-     float S = P00 + R_m;
-     float K0 = P00 / S;
-     float K1 = P10 / S;
-
-     f += K0 * (f_measured - f);
-     d += K1 * (f_measured - f);
-        
-     // ... (P-Matrix Update wie oben)
-        
-    last_pps_time = now;
-    } else {
-        // --- HOLDOVER: Nur Vorhersage nutzen ---
-        holdover_active = true;
-        // Wir korrigieren f und d NICHT mit der Messung.
-        // P (Unsicherheit) wächst automatisch weiter an, da Q addiert wird.
-    }
-
-    // PWM Ausgabe basierend auf der aktuellen Schätzung f
-    apply_pwm(f);
-}
-
-
-void apply_pwm(float estimated_f) {
-  float target_pwm = CENTER_PWM + (estimated_f * STEPS_PER_HZ);
-  ledcWrite(0, (uint32_t)constrain(target_pwm, 0, 65535));
-}
 
 
 
