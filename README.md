@@ -30,7 +30,7 @@ Project goal is a ~~less than 100 bucks~~ small budget hobbyists GPS disciplined
 ***This is work in progress. Everything still changes day by day. Success is optional, this is a fully fun based project.***
 
 Thoughts:
-1. ~~To be understood: Do we really need an real OCXO for this, or, might a cheap second ESP32, with xtra programming do the job of an OCXO?
+1. ~~To be understood: Do we really need an real OCXO for this, or, might a cheap second ESP32, with xtra programming do the job of an OCXO?~~
    -> Tested && understood. Not really, even the short time stability is too bad.
-2. ~~How should i implement PWM corrections? Basic idea, the larger the offset is, the larger the steps.
+2. ~~How should i implement PWM corrections? Basic idea, the larger the offset is, the larger the steps.~~
    -> we need a bit of statistic and use an Kalman filter approach.
