@@ -6,7 +6,7 @@ Project goal is a ~~less than 100 bucks~~ small budget hobbyists GPS disciplined
   costs at common market places ~15€. I use an CTI OSC5A2B02 OCXO based board.
 - an ESP32 devkit C V4, ~12€ (mine was ~8€)
 - Arduino IDE with a few libs, 0€, but some efforts in/plus time/research.
-- a GPS module with an 1pps (pulse per second) digital signal output ~~, ~12€. Mine has an SMT LED, which i use.~~
+- a GPS module with an 1pps (pulse per second) digital signal output ~~, 12€. Mine has an SMT LED, which i use.~~
   I switched to an Sparkfun GPS-17285 module, based on Neo-M9N, together with a Sparkfun GPS-14986 antenna. A bit expensive, but more fun.
 - a few electronic components
 - an old 1.8 inch TFT based on St7735, i use the one with the large SD card slot, ~6€
