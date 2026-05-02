@@ -21,7 +21,7 @@ Project goal is a ~~less than 100 bucks~~ small budget hobbyists GPS disciplined
 - if the gate time is over, the counter is stopped (again by the 1PPS), we calculate the number of pulses: pulses = current_counter + overflows * 30000
 - now, we can calculate the frequency: frequency = pulses / gate_time
 - and the current frequency error in ppm: errorPPM = (measuredFreq - TARGET_FREQ) / (TARGET_FREQ / 1e6)
-- as our OCXO is voltage controlled by 0..4volts, we need to generate a control voltage. We generate a PWM, again using hardware counters of the ESP32.
+- as our OCXO is voltage controlled by 0..4volts, we need to generate a control voltage. We generate a 16-bit PWM, again using hardware counters of the ESP32.
 - the pwm signal is RC filtered, we need to put a bit effort in this filter. We want more than 100dB frequency suppression for the PWM frequency.
 - and finally, we somehow need to map an error in ppm to and PWM value. This job serves a digital filter with a bit brain, the Kalman filter.
 
