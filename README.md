@@ -18,7 +18,7 @@ Project goal is a ~~less than 100 bucks~~ small budget hobbyists GPS disciplined
 - the 10MHz signal is counted by the ESP32 specific hardware counter PCNT. Every 30000 counts, this counter fires a second ISR.
 - the counter overflows are counted. This is an important step, as no µC will fire 10*10^6 interrupts per second.
   With this solution, our ISR is called 333 times a second only.
-- the if the gate time is over, stopped (again by the 1PPS), we calcalute the number of pulses: pulses = current_counter + overflows * 30000
+- if the gate time is over, the counter is stopped (again by the 1PPS), we calculate the number of pulses: pulses = current_counter + overflows * 30000
 - now, we can calculate the frequency: frequency = pulses / gate_time
 - and the current frequency error in ppm: errorPPM = (measuredFreq - TARGET_FREQ) / (TARGET_FREQ / 1e6)
 - as our OCXO is voltage controlled by 0..4volts, we need to generate a control voltage. We generate a PWM, again using hardware counters of the ESP32.
