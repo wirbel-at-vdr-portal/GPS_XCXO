@@ -6,7 +6,7 @@
 <setting alwaysvectorfont="no"/>
 <setting verticaltext="up"/>
 </settings>
-<grid distance="25" unitdist="mil" unit="mil" style="lines" multiple="1" display="no" altdistance="0.01" altunitdist="inch" altunit="inch"/>
+<grid distance="0.1" unitdist="inch" unit="inch" style="lines" multiple="1" display="no" altdistance="0.01" altunitdist="inch" altunit="inch"/>
 <layers>
 <layer number="1" name="Top" color="4" fill="1" visible="no" active="no"/>
 <layer number="16" name="Bottom" color="1" fill="1" visible="no" active="no"/>
@@ -145,7 +145,6 @@
 <wire x1="-4.5" y1="3.3" x2="4.5" y2="3.3" width="0.127" layer="21"/>
 <wire x1="-4.5" y1="7.62" x2="-4.5" y2="0" width="0.127" layer="21"/>
 <wire x1="4.5" y1="7.62" x2="4.5" y2="-5.08" width="0.127" layer="21"/>
-<wire x1="4.5" y1="-5.08" x2="2.54" y2="-5.08" width="0.127" layer="21"/>
 <text x="-2.54" y="5.08" size="1.27" layer="27">DC-005</text>
 </package>
 <package name="ESP32_DEVKIT_C_V4">
@@ -429,10 +428,10 @@ Based on the following sources:
 <package name="SO14">
 <description>&lt;b&gt;Small Outline package&lt;/b&gt; 150 mil</description>
 <wire x1="4.064" y1="1.9558" x2="-4.064" y2="1.9558" width="0.1524" layer="51"/>
-<wire x1="4.064" y1="-1.9558" x2="4.445" y2="-1.5748" width="0.1524" layer="21" curve="90"/>
-<wire x1="-4.445" y1="1.5748" x2="-4.064" y2="1.9558" width="0.1524" layer="21" curve="-90"/>
-<wire x1="4.064" y1="1.9558" x2="4.445" y2="1.5748" width="0.1524" layer="21" curve="-90"/>
-<wire x1="-4.445" y1="-1.5748" x2="-4.064" y2="-1.9558" width="0.1524" layer="21" curve="90"/>
+<wire x1="4.064" y1="-1.9558" x2="4.445" y2="-1.5748" width="0.1524" layer="51" curve="90"/>
+<wire x1="-4.445" y1="1.5748" x2="-4.064" y2="1.9558" width="0.1524" layer="51" curve="-90"/>
+<wire x1="4.064" y1="1.9558" x2="4.445" y2="1.5748" width="0.1524" layer="51" curve="-90"/>
+<wire x1="-4.445" y1="-1.5748" x2="-4.064" y2="-1.9558" width="0.1524" layer="51" curve="90"/>
 <wire x1="-4.064" y1="-1.9558" x2="4.064" y2="-1.9558" width="0.1524" layer="51"/>
 <wire x1="4.445" y1="-1.5748" x2="4.445" y2="1.5748" width="0.1524" layer="21"/>
 <wire x1="-4.445" y1="1.5748" x2="-4.445" y2="0.508" width="0.1524" layer="21"/>
@@ -877,7 +876,7 @@ TS-003</description>
 <description>&lt;b&gt;TO 200 vertical&lt;/b&gt;</description>
 <wire x1="5.08" y1="-1.143" x2="4.953" y2="-4.064" width="0.127" layer="21"/>
 <wire x1="4.699" y1="-4.318" x2="4.953" y2="-4.064" width="0.127" layer="21"/>
-<wire x1="4.699" y1="-4.318" x2="-4.699" y2="-4.318" width="0.127" layer="21"/>
+<wire x1="4.699" y1="-4.318" x2="-4.699" y2="-4.318" width="0.127" layer="51"/>
 <wire x1="-4.953" y1="-4.064" x2="-4.699" y2="-4.318" width="0.127" layer="21"/>
 <wire x1="-4.953" y1="-4.064" x2="-5.08" y2="-1.143" width="0.127" layer="21"/>
 <circle x="-4.4958" y="-3.7084" radius="0.254" width="0.127" layer="21"/>
@@ -889,12 +888,12 @@ TS-003</description>
 <text x="-3.175" y="-3.175" size="1.27" layer="51" ratio="10">1</text>
 <text x="-0.635" y="-3.175" size="1.27" layer="51" ratio="10">2</text>
 <text x="1.905" y="-3.175" size="1.27" layer="51" ratio="10">3</text>
-<rectangle x1="-5.334" y1="-0.762" x2="5.334" y2="0" layer="21"/>
-<rectangle x1="-5.334" y1="-1.27" x2="-3.429" y2="-0.762" layer="21"/>
-<rectangle x1="-1.651" y1="-1.27" x2="-0.889" y2="-0.762" layer="21"/>
+<rectangle x1="-5.334" y1="-0.762" x2="5.334" y2="0" layer="51"/>
+<rectangle x1="-5.334" y1="-1.27" x2="-3.429" y2="-0.762" layer="51"/>
+<rectangle x1="-1.651" y1="-1.27" x2="-0.889" y2="-0.762" layer="51"/>
 <rectangle x1="-3.429" y1="-1.27" x2="-1.651" y2="-0.762" layer="51"/>
-<rectangle x1="0.889" y1="-1.27" x2="1.651" y2="-0.762" layer="21"/>
-<rectangle x1="3.429" y1="-1.27" x2="5.334" y2="-0.762" layer="21"/>
+<rectangle x1="0.889" y1="-1.27" x2="1.651" y2="-0.762" layer="51"/>
+<rectangle x1="3.429" y1="-1.27" x2="5.334" y2="-0.762" layer="51"/>
 <rectangle x1="-0.889" y1="-1.27" x2="0.889" y2="-0.762" layer="51"/>
 <rectangle x1="1.651" y1="-1.27" x2="3.429" y2="-0.762" layer="51"/>
 </package>
@@ -16537,7 +16536,6 @@ general purpose rectifier, 1 A</description>
 <part name="U$2" library="_Winni" deviceset="TFT_18" device=""/>
 <part name="U$3" library="_Winni" deviceset="POWERBUCHSE" device=""/>
 <part name="SUPPLY26" library="supply2" deviceset="GND" device=""/>
-<part name="SUPPLY25" library="supply2" deviceset="GND" device=""/>
 <part name="D1" library="diode" deviceset="1N4004" device=""/>
 <part name="SUPPLY28" library="supply2" deviceset="GND" device=""/>
 <part name="C13" library="rcl" deviceset="C-EU" device="C1210" value="1µ"/>
@@ -16555,6 +16553,8 @@ general purpose rectifier, 1 A</description>
 <part name="SUPPLY2" library="supply2" deviceset="GND" device=""/>
 <part name="SUPPLY3" library="supply2" deviceset="GND" device=""/>
 <part name="SUPPLY7" library="supply2" deviceset="GND" device=""/>
+<part name="U$1" library="_Winni" deviceset="POWERBUCHSE" device=""/>
+<part name="SUPPLY8" library="supply2" deviceset="GND" device=""/>
 </parts>
 <sheets>
 <sheet>
@@ -16563,7 +16563,6 @@ general purpose rectifier, 1 A</description>
 5V CMOS</text>
 <text x="-144.78" y="15.24" size="1.778" layer="91">10MHz
 sine wave</text>
-<text x="93.98" y="58.42" size="1.778" layer="91">https://randomnerdtutorials.com/guide-to-1-8-tft-display-with-arduino/</text>
 </plain>
 <instances>
 <instance part="IC1" gate="A" x="-66.04" y="96.52"/>
@@ -16571,7 +16570,7 @@ sine wave</text>
 <instance part="IC1" gate="C" x="-68.58" y="33.02" rot="R180"/>
 <instance part="IC1" gate="D" x="-68.58" y="17.78" rot="R180"/>
 <instance part="IC1" gate="E" x="-25.4" y="66.04" rot="MR0"/>
-<instance part="IC1" gate="F" x="198.12" y="76.2"/>
+<instance part="IC1" gate="F" x="-66.04" y="78.74"/>
 <instance part="IC1" gate="P" x="144.78" y="86.36"/>
 <instance part="X1" gate="G1" x="-83.82" y="78.74"/>
 <instance part="SUPPLY1" gate="GND" x="-81.28" y="73.66"/>
@@ -16630,7 +16629,6 @@ sine wave</text>
 <instance part="U$2" gate="G$1" x="116.84" y="27.94"/>
 <instance part="U$3" gate="G$1" x="68.58" y="91.44" rot="MR0"/>
 <instance part="SUPPLY26" gate="GND" x="73.66" y="86.36"/>
-<instance part="SUPPLY25" gate="GND" x="187.96" y="73.66"/>
 <instance part="D1" gate="1" x="81.28" y="91.44" rot="R90"/>
 <instance part="SUPPLY28" gate="GND" x="81.28" y="86.36"/>
 <instance part="C13" gate="G$1" x="-20.32" y="81.28" rot="R270"/>
@@ -16651,6 +16649,8 @@ sine wave</text>
 <instance part="SUPPLY2" gate="GND" x="-71.12" y="-17.78"/>
 <instance part="SUPPLY3" gate="GND" x="-83.82" y="-17.78"/>
 <instance part="SUPPLY7" gate="GND" x="-99.06" y="-17.78"/>
+<instance part="U$1" gate="G$1" x="68.58" y="76.2" rot="MR0"/>
+<instance part="SUPPLY8" gate="GND" x="73.66" y="71.12"/>
 </instances>
 <busses>
 </busses>
@@ -16733,10 +16733,6 @@ sine wave</text>
 <pinref part="SUPPLY26" gate="GND" pin="GND"/>
 </segment>
 <segment>
-<pinref part="IC1" gate="F" pin="I"/>
-<pinref part="SUPPLY25" gate="GND" pin="GND"/>
-</segment>
-<segment>
 <pinref part="D1" gate="1" pin="A"/>
 <pinref part="SUPPLY28" gate="GND" pin="GND"/>
 </segment>
@@ -16765,6 +16761,10 @@ sine wave</text>
 <pinref part="C4" gate="G$1" pin="2"/>
 <pinref part="SUPPLY7" gate="GND" pin="GND"/>
 </segment>
+<segment>
+<pinref part="U$1" gate="G$1" pin="2"/>
+<pinref part="SUPPLY8" gate="GND" pin="GND"/>
+</segment>
 </net>
 <net name="PPS_IN" class="0">
 <segment>
@@ -16783,20 +16783,20 @@ sine wave</text>
 </net>
 <net name="10MHZ_IN" class="0">
 <segment>
-<pinref part="X1" gate="G1" pin="1"/>
-<wire x1="-81.28" y1="78.74" x2="-53.34" y2="78.74" width="0.1524" layer="91"/>
+<wire x1="-55.88" y1="78.74" x2="-53.34" y2="78.74" width="0.1524" layer="91"/>
 <wire x1="-53.34" y1="78.74" x2="-53.34" y2="73.66" width="0.1524" layer="91"/>
 <pinref part="IC1" gate="B" pin="I"/>
 <wire x1="-53.34" y1="73.66" x2="-53.34" y2="50.8" width="0.1524" layer="91"/>
 <wire x1="-53.34" y1="50.8" x2="-58.42" y2="50.8" width="0.1524" layer="91"/>
 <junction x="-53.34" y="73.66"/>
 <label x="-38.1" y="73.66" size="1.778" layer="95"/>
-<wire x1="-5.08" y1="73.66" x2="-53.34" y2="73.66" width="0.1524" layer="91"/>
+<wire x1="-7.62" y1="73.66" x2="-53.34" y2="73.66" width="0.1524" layer="91"/>
 <wire x1="22.86" y1="53.34" x2="22.86" y2="30.48" width="0.1524" layer="91"/>
-<wire x1="22.86" y1="30.48" x2="-5.08" y2="30.48" width="0.1524" layer="91"/>
-<wire x1="-5.08" y1="30.48" x2="-5.08" y2="73.66" width="0.1524" layer="91"/>
+<wire x1="22.86" y1="30.48" x2="-7.62" y2="30.48" width="0.1524" layer="91"/>
+<wire x1="-7.62" y1="30.48" x2="-7.62" y2="73.66" width="0.1524" layer="91"/>
 <wire x1="31.75" y1="53.34" x2="22.86" y2="53.34" width="0.1524" layer="91"/>
 <pinref part="U$4" gate="G$1" pin="4"/>
+<pinref part="IC1" gate="F" pin="O"/>
 </segment>
 </net>
 <net name="N$2" class="0">
@@ -16932,8 +16932,13 @@ sine wave</text>
 <wire x1="91.44" y1="93.98" x2="81.28" y2="93.98" width="0.1524" layer="91"/>
 <pinref part="U$3" gate="G$1" pin="1"/>
 <pinref part="D1" gate="1" pin="C"/>
-<wire x1="81.28" y1="93.98" x2="73.66" y2="93.98" width="0.1524" layer="91"/>
+<wire x1="81.28" y1="93.98" x2="76.2" y2="93.98" width="0.1524" layer="91"/>
 <junction x="81.28" y="93.98"/>
+<pinref part="U$1" gate="G$1" pin="1"/>
+<wire x1="76.2" y1="93.98" x2="73.66" y2="93.98" width="0.1524" layer="91"/>
+<wire x1="73.66" y1="78.74" x2="76.2" y2="78.74" width="0.1524" layer="91"/>
+<wire x1="76.2" y1="78.74" x2="76.2" y2="93.98" width="0.1524" layer="91"/>
+<junction x="76.2" y="93.98"/>
 </segment>
 </net>
 <net name="3V3" class="0">
@@ -17049,6 +17054,13 @@ sine wave</text>
 <pinref part="R2" gate="G$1" pin="1"/>
 <pinref part="C2" gate="G$1" pin="1"/>
 <junction x="-71.12" y="-7.62"/>
+</segment>
+</net>
+<net name="N$13" class="0">
+<segment>
+<pinref part="X1" gate="G1" pin="1"/>
+<wire x1="-81.28" y1="78.74" x2="-76.2" y2="78.74" width="0.1524" layer="91"/>
+<pinref part="IC1" gate="F" pin="I"/>
 </segment>
 </net>
 </nets>
