@@ -212,12 +212,12 @@ void loop() {
      Display.setTextSize(1);
      Display.setCursor(10, 10);
      Display.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
-     Display.println("ACTUAL FREQUENCY");
+     Display.println("ACTUAL FREQUENCY (Hz)");
      Display.setTextSize(2);
      Display.setCursor(10, 25);
      Display.setTextColor(ST77XX_GREEN, ST77XX_BLACK);
-     Display.print(frequency, 1); 
-     Display.print("Hz              ");
+     Display.print(frequency, 3); 
+     Display.print("              ");
 
      // 2. offset
      Display.setTextSize(1);
@@ -232,9 +232,11 @@ void loop() {
      Display.print("Hz      ");
 
 
-     if      (abs(offset_ppm) >  2.0) gate_time = 1;
-     else if (abs(offset_ppm) >= 1.5) gate_time = 10;
-     else                             gate_time = 100;
+     if      (abs(offset) >  20)  gate_time = 1;
+     else if (abs(offset) >=  5)  gate_time = 10;
+     else if (abs(offset) >=  2)  gate_time = 20;
+     else if (abs(offset) >= 0.5) gate_time = 100;
+     else                         gate_time = 1000;
      isr_data.ticks = gate_time;
 
 
@@ -244,7 +246,7 @@ void loop() {
      Display.setTextColor(ST77XX_YELLOW, ST77XX_BLACK);
      if (gate_time < 10) Display.print(" ");
      Display.print(gate_time); Display.print("sec ");
-     Display.print(offset_ppm,2); Display.print("ppm ");
+     Display.print(offset_ppm,3); Display.print("ppm ");
      Display.print(pwm_val); Display.print("            ");
      }
   else if (last_ticks != isr_data.ticks) {
@@ -255,7 +257,7 @@ void loop() {
      Display.setTextColor(ST77XX_YELLOW, ST77XX_BLACK);
      if (gate_time < 10) Display.print(" ");
      Display.print(isr_data.ticks+1); Display.print("sec ");
-     Display.print(offset_ppm,2); Display.print("ppm ");
+     Display.print(offset_ppm,3); Display.print("ppm ");
      Display.print(pwm_val); Display.print("            ");
      }
   delay(100);
