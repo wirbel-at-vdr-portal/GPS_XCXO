@@ -54,13 +54,12 @@ struct ISR_Data {
   int32_t ticks;       // set in OnPPS
   uint32_t Overflows;  // increased in OnOverflow, reset in OnPPS
   uint32_t overflows;  // increased in OnOverflow, reset in OnPPS
-  int32_t count_tmp;   // set in OnPPS, remember the current clocks as fast as possible.
   int32_t count;       // set in OnPPS
   uint32_t ready;      // set in OnPPS
   uint32_t isr_duration;  // debug only.
 } __attribute__((aligned(4)));
 
-volatile ISR_Data isr_data = {0, 0, 0, 0, 0, 0, 0};
+volatile ISR_Data isr_data = {0, 0, 0, 0, 0, 0};
 
 
 
@@ -68,7 +67,6 @@ int gate_time = 10;                  // time for smoothing, up to 100, may be la
 uint32_t pwm_val;                    // PWM freq < (80*1000*1000)/2^Resolution; 1220Hz for 16bit.
 uint32_t pwm_frequency = 1220;
 
-//void IRAM_ATTR OnOverflow(void *arg) {
 
 /* to count cpu clocks, we have a xtal counter available:
 uint32_t start = xthal_get_ccount();
@@ -78,35 +76,20 @@ isr_duration = end - start;
 
 // ISR: triggered every MAX_COUNTER counts by PCNT
 static bool IRAM_ATTR OnOverflow(pcnt_unit_handle_t unit, const pcnt_watch_event_data_t* edata, void* user_ctx) {
-  isr_data.Overflows = isr_data.Overflows + 1;   // warning on ++ operator
-  //PCNT.int_clr.val = BIT(0);                   // acknowledge interrupt
-  *(volatile uint32_t*)(PCNT_INT_CLR_REG) = 1UL; // acknowledge interrupt
+  isr_data.Overflows = isr_data.Overflows + 1; // warning on ++ operator
   return false; // no context switch.
 }
 
 // ISR: triggered every 1.0000000 Hz
 void IRAM_ATTR OnPPS() {
-  // NOTE:
-  //  - slower, but identical: count_tmp = pcnt_ll_get_count(PCNT_LL_GET_HW(0), 0);
-  //  - PCNT_U0_CNT_REG is the PCNT counter value for unit 0
-  isr_data.count_tmp = *(volatile int16_t*) (PCNT_U0_CNT_REG); // 16-Bit register, therefore the cast.
+  isr_data.count = pcnt_ll_get_count(PCNT_LL_GET_HW(0), 0);
 
-
-  isr_data.ticks = isr_data.ticks - 1;
+  isr_data.ticks = isr_data.ticks - 1; // warning on -- operator
   if (isr_data.ticks > 0) return;
-
-  // NOTE:
-  //  - slower, but identical: pcnt_ll_clear_count(PCNT_LL_GET_HW(0), 0);
-  //  - toggling the reset bit in the counter config resets the counter to zero.
-
-  *(volatile uint32_t*)(PCNT_U0_CONF0_REG) |=  PCNT_PLUS_CNT_RST_U0;
-  *(volatile uint32_t*)(PCNT_U0_CONF0_REG) &= ~PCNT_PLUS_CNT_RST_U0;
-
 
   isr_data.overflows = isr_data.Overflows;
   isr_data.Overflows = 0;
   isr_data.ticks = 1000000; // actually disabled. will be updated by loop()
-  isr_data.count = isr_data.count_tmp;
   isr_data.ready = 1;
 }
 
@@ -141,7 +124,7 @@ void setup(void) {
    */
 
   pcnt_unit_config_t unit_config = {
-     .low_limit = 0,
+     .low_limit = -1,
      .high_limit = (int16_t)MAX_COUNTER,
      //.flags = { .accum_count = true }
      };
@@ -161,32 +144,6 @@ void setup(void) {
   pcnt_unit_clear_count(pcnt_unit);
   pcnt_unit_start(pcnt_unit);
 
-
-
-  /*
-  pcnt_config_t pcnt_cfg = {
-     .pulse_gpio_num = OSC_IN,                // input pin
-     .ctrl_gpio_num  = -1,                    // 
-     .lctrl_mode     = PCNT_MODE_KEEP,        // 
-     .hctrl_mode     = PCNT_MODE_KEEP,        // 
-     .pos_mode       = PCNT_COUNT_INC,        // count rising edges
-     .neg_mode       = PCNT_COUNT_DIS,        // 
-     .counter_h_lim  = MAX_COUNTER,           // counter end (overflow)
-     .counter_l_lim  = 0,                     // counter begin
-     .unit           = PCNT_UNIT_0,           // 
-     .channel        = PCNT_CHANNEL_0,        // 
-     };
-  pcnt_unit_config(&pcnt_cfg);
-  pcnt_set_filter_value(PCNT_UNIT_0, 1); // running on 80MHz. 1clk = 12.5nsec
-  pcnt_filter_enable(PCNT_UNIT_0);
-  pcnt_isr_service_install(0);
-  pcnt_event_enable(PCNT_UNIT_0, PCNT_EVT_H_LIM);
-  pcnt_isr_handler_add(PCNT_UNIT_0, OnOverflow, NULL);
-  pcnt_counter_pause(PCNT_UNIT_0);
-  pcnt_counter_clear(PCNT_UNIT_0);
-  pcnt_counter_resume(PCNT_UNIT_0);
-  */
-
   // enable 1Hz ISR
   attachInterrupt(PPS_IN, OnPPS, RISING);
   pwm_val = 65536UL >> 1;
@@ -202,6 +159,7 @@ void setup(void) {
 
 
 uint64_t pulses = 0;
+int16_t last_count; // if we store here the last count value, we dont need to reset the PCNT
 double frequency;
 double offset;
 double offset_ppm;
@@ -217,6 +175,8 @@ void loop() {
      interrupts();
      // ***** critical section end
      isr_data.ready = 0;
+     pulses -= last_count; // we did not start at zero anymore.
+     last_count = isr_data.count;
 
      Serial.print("pulses = "); Serial.println(pulses);
 
@@ -283,10 +243,8 @@ void loop() {
      Display.setCursor(10, 110);
      Display.setTextColor(ST77XX_YELLOW, ST77XX_BLACK);
      if (gate_time < 10) Display.print(" ");
-     Display.print(gate_time); Display.print("sec");
-     Display.print(" | ");
-     Display.print(offset_ppm,1); Display.print("ppm");
-     Display.print(" | ");     
+     Display.print(gate_time); Display.print("sec ");
+     Display.print(offset_ppm,2); Display.print("ppm ");
      Display.print(pwm_val); Display.print("            ");
      }
   else if (last_ticks != isr_data.ticks) {
@@ -296,10 +254,8 @@ void loop() {
      Display.setCursor(10, 110);
      Display.setTextColor(ST77XX_YELLOW, ST77XX_BLACK);
      if (gate_time < 10) Display.print(" ");
-     Display.print(isr_data.ticks+1); Display.print("sec");
-     Display.print(" | ");
-     Display.print(offset_ppm,1); Display.print("ppm");
-     Display.print(" | ");     
+     Display.print(isr_data.ticks+1); Display.print("sec ");
+     Display.print(offset_ppm,2); Display.print("ppm ");
      Display.print(pwm_val); Display.print("            ");
      }
   delay(100);
