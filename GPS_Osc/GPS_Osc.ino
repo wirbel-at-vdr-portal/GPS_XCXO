@@ -39,7 +39,7 @@
 #define OSC_IN   4 // 10MHz CMOS signal from OCXO
 #define PWM_OUT 32 // 16bit PWM
 #define FREQUENCY      MHz(10)
-#define MAX_COUNTER   (int16_t) 30000 // 16bit signed: less or equal 32767
+uint64_t MAX_COUNTER = 30000; // less or equal 32767
 
 pcnt_unit_handle_t pcnt_unit = NULL;
 
@@ -139,7 +139,7 @@ void setup(void) {
      PCNT_CHANNEL_EDGE_ACTION_HOLD);    // on falling edge no action.
   pcnt_event_callbacks_t cbs = { .on_reach = OnOverflow,};
   pcnt_unit_register_event_callbacks(pcnt_unit, &cbs, NULL);
-  pcnt_unit_add_watch_point(pcnt_unit, MAX_COUNTER);
+  pcnt_unit_add_watch_point(pcnt_unit, (int)MAX_COUNTER);
   pcnt_unit_enable(pcnt_unit);
   pcnt_unit_clear_count(pcnt_unit);
   pcnt_unit_start(pcnt_unit);
@@ -163,22 +163,26 @@ int16_t last_count; // if we store here the last count value, we dont need to re
 double frequency;
 double offset;
 double offset_ppm;
-int last_ticks;
+int last_ticks = -1;
+int timeout = 0;
 
 
 void loop() {
 
   if (isr_data.ready == 1) {
+     uint32_t overflows32, count32;
      // ***** critical section begin: disable interrupts while copy value
      noInterrupts();
-     pulses = isr_data.overflows * MAX_COUNTER + isr_data.count;
+     count32     = isr_data.count;
+     overflows32 = isr_data.overflows;
      interrupts();
      // ***** critical section end
      isr_data.ready = 0;
+     pulses = overflows32 * MAX_COUNTER + count32; // MAX_COUNTER is uint64_t
      pulses -= last_count; // we did not start at zero anymore.
-     last_count = isr_data.count;
+     last_count = count32;
 
-     Serial.print("pulses = "); Serial.println(pulses);
+
 
      // we take up to (gate_time) secs samples and average
      frequency = ((double) pulses) / gate_time;
@@ -188,7 +192,7 @@ void loop() {
      pwm_val = kalman_filter(frequency, gate_time);
      ledcWrite(PWM_OUT, pwm_val);
 
-
+/*
      Serial.print("Gate time: ");
      Serial.print(gate_time);
      Serial.println("s");
@@ -200,8 +204,7 @@ void loop() {
      Serial.print("Offset: ");
      Serial.print(offset);
      Serial.println("Hz");
-     
-
+*/
 
 
      // --- TFT output ---
@@ -232,11 +235,10 @@ void loop() {
      Display.print("Hz      ");
 
 
-     if      (abs(offset) >  20)  gate_time = 1;
-     else if (abs(offset) >=  5)  gate_time = 10;
-     else if (abs(offset) >=  2)  gate_time = 20;
-     else if (abs(offset) >= 0.5) gate_time = 100;
-     else                         gate_time = 1000;
+          if (abs(offset) > 2.0)    gate_time = 10;
+     else if (abs(offset) >= 1.0)   gate_time = 100;
+     else if (abs(offset) >= 0.3)   gate_time = 500;
+     else                           gate_time = 1000;
      isr_data.ticks = gate_time;
 
 
@@ -249,16 +251,29 @@ void loop() {
      Display.print(offset_ppm,3); Display.print("ppm ");
      Display.print(pwm_val); Display.print("            ");
      }
-  else if (last_ticks != isr_data.ticks) {
-     Display.setRotation(1); // 1 = 160x128 (Landscape)
-     Display.setTextWrap(false); // Verhindert Zeilenumbruch bei Überlänge
-     Display.setTextSize(1);
-     Display.setCursor(10, 110);
-     Display.setTextColor(ST77XX_YELLOW, ST77XX_BLACK);
-     if (gate_time < 10) Display.print(" ");
-     Display.print(isr_data.ticks+1); Display.print("sec ");
-     Display.print(offset_ppm,3); Display.print("ppm ");
-     Display.print(pwm_val); Display.print("            ");
+  else {
+     if (last_ticks != isr_data.ticks) {
+        last_ticks = isr_data.ticks;
+        Display.setRotation(1);
+        Display.setTextWrap(false); // Verhindert Zeilenumbruch bei Überlänge
+        Display.setTextSize(1);
+        Display.setCursor(10, 110);
+        Display.setTextColor(ST77XX_YELLOW, ST77XX_BLACK);
+        if (gate_time < 10) Display.print(" ");
+        Display.print(isr_data.ticks+1); Display.print("sec ");
+        Display.print(offset_ppm,3); Display.print("ppm ");
+        Display.print(pwm_val); Display.print("            ");
+        timeout = 0;
+        }
+     else
+        timeout++;
+     if (timeout % 100 > 95) {
+        Display.fillScreen(ST77XX_BLACK);
+        Display.setTextSize(2);
+        Display.setCursor(10, 25);
+        Display.setTextColor(ST77XX_RED, ST77XX_BLACK);
+        Display.println("No Reference");
+        }
      }
   delay(100);
 }

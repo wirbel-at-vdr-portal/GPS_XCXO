@@ -102,15 +102,12 @@ struct KalmanGPSDO {
 
   // --- Process Noise Q (OCXO Stability) ---
   // Q defines how much uncertainty we add per second.
-  const double Q_pwm   = 0.0001f;   // Random walk of the OCXO frequency
-  const double Q_drift = 0.000001f; // Instability of the aging/drift rate
+  double Q_pwm   = 1e-6;      // Random walk of the OCXO frequency. 1e-4 (bad stability) .. 1e-9 (ultra precise, but slow)
+  double Q_drift = 1e-6;      // Instability of the aging/drift rate 1e-6 (warming up) .. 1e-10 (thermal not disturbed)
 
-  double max_ppm;    // Dynamic acceptance threshold for PPS measurements
+  double innovation;    // how large our last step was.
+  bool ppsValid;
 };
-
-
-
-
 
 
 KalmanGPSDO state = {
@@ -119,8 +116,12 @@ KalmanGPSDO state = {
   .P00     = 100.0,           // Estimation error variance for PWM value
   .P01     = 0.0, .P10 = 0.0, // Correlation between PWM error and Drift error. Symmetric.
   .P11     = 1.0,             // Estimation error variance for the Drift rate
-  .max_ppm = 10.0f,           // update only, if we find samples less than 10ppm off
+  .Q_pwm   = 1e-6,            // 1e-4 (bad stability) .. 1e-9 (ultra precise, but slow)
+  .Q_drift = 1e-6,            // 1e-6 (warming up) .. 1e-10 (thermal not disturbed)
+  .innovation = 0.0f,         // how large our last step was.
+  .ppsValid = false,
 };
+
 
 
 /* Our measure uncertainty is about 3 counts (0.3ppm). For one sec measurement time that
@@ -130,9 +131,7 @@ KalmanGPSDO state = {
 const double TARGET_FREQ = 10000000.0;
 const double PWM_PRO_PPM = 65535.0 / 4.0; 
 const double MEASUREMENT_ERROR_PWM = 0.1 * PWM_PRO_PPM; // 1 count error at 1s; ~1638
-const double DEADZONE_PPM = 0.0005f;                    // Deadzone: If error is less than 0.001 ppm (0.01 Hz @ 10 MHz), stay quiet
-const double DEADZONE_INNOVATION = 5.0;                 // approx. 49 digits
-const double MAX_DRIFT = 0.01f;                         // PWM change per second: ~864 digits/day
+const double MAX_DRIFT = 1e-4;
 
 
 
@@ -148,12 +147,11 @@ const double MAX_DRIFT = 0.01f;                         // PWM change per second
  */
 uint32_t kalman_filter(double measuredFreq, double dt) {
   // 0. check first.
-  double errorPPM = (measuredFreq - TARGET_FREQ) / (TARGET_FREQ / 1e6);
-       if (state.P00 < 1.0 ) state.max_ppm = 3.0;
-  else if (state.P00 < 10.0) state.max_ppm = 5.0;
-  else                       state.max_ppm = 10.0f;
-  bool ppsValid = fabs(errorPPM) < state.max_ppm;
-
+  double freq_offset = fabs(measuredFreq - TARGET_FREQ);
+       if (dt >= 1000.0) state.ppsValid = freq_offset <= 0.3;
+  else if (dt >= 500.0)  state.ppsValid = freq_offset <= 1.0;
+  else if (dt >= 100.0)  state.ppsValid = freq_offset <= 2.0;
+  else                   state.ppsValid = freq_offset <= 20.0;
 
   // --- 1. PREDICT PHASE ---
   // Project the state ahead: x = F * x
@@ -170,7 +168,13 @@ uint32_t kalman_filter(double measuredFreq, double dt) {
   state.P10 += dt * state.P11;
   state.P11 += state.Q_drift;
 
-  if (ppsValid) {
+  if (state.ppsValid) {
+          if (freq_offset >= 10.0) { state.Q_pwm = 1e-4; state.Q_drift = 1e-6; }
+     else if (freq_offset >= 1.0)  { state.Q_pwm = 1e-5; state.Q_drift = 1e-6; }
+     else if (freq_offset >= 0.1)  { state.Q_pwm = 1e-6; state.Q_drift = 1e-7; }
+     else                          { state.Q_pwm = 1e-8; state.Q_drift = 1e-9; }
+
+
      // measurement
      double errorPPM = (measuredFreq - TARGET_FREQ) / (TARGET_FREQ / 1e6);
      double measurement = state.x_pwm - (errorPPM * PWM_PRO_PPM);
@@ -191,12 +195,10 @@ uint32_t kalman_filter(double measuredFreq, double dt) {
 
 
      // Update State with measurement innovation
-     double innovation = measurement - state.x_pwm;
-     if (fabs(innovation) < DEADZONE_INNOVATION)
-        innovation = 0.0f; // too small offset to do some work.
+     state.innovation = measurement - state.x_pwm;
 
-     state.x_pwm   += K0 * innovation;
-     state.x_drift += K1 * innovation;
+     state.x_pwm   += K0 * state.innovation;
+     state.x_drift += K1 * state.innovation;
 
 
      // CLAMPING: we don't want any unrealistic values for frequency drift.
@@ -211,7 +213,7 @@ uint32_t kalman_filter(double measuredFreq, double dt) {
         state.P00 = 100.0;
         state.P01 = state.P10 = 0.0;
         state.P11 = 1.0;
-        state.max_ppm = 10.0f;
+        state.innovation = 0.0;
         }
      
      // Update Error Covariance Matrix: P = (I - K*H) * P
@@ -224,13 +226,14 @@ uint32_t kalman_filter(double measuredFreq, double dt) {
      state.P10 -= K1 * P00_old;
      state.P11 -= K1 * P01_old;
 
-     Serial.print("errorPPM:");     Serial.print(errorPPM, 6);
+     Serial.print("gate_time:");    Serial.print(dt,0);
+     Serial.print(",errorPPM:");    Serial.print(errorPPM, 6);
      Serial.print(",measurement:"); Serial.print(measurement, 2);
      
-     Serial.print(",Freq:");        Serial.print(measuredFreq, 2);
+     Serial.print(",Freq:");        Serial.print(measuredFreq, 3);
      Serial.print(",PWM:");         Serial.print(state.x_pwm, 2);
      Serial.print(",Drift:");       Serial.print(state.x_drift, 6);
-     Serial.print(",Innovation:");  Serial.print(innovation, 4);
+     Serial.print(",Innovation:");  Serial.print(state.innovation, 4);
      Serial.print(",Uncertainty:"); Serial.println(state.P00, 4);
      }
 
