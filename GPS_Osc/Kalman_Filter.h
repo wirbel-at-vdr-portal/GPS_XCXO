@@ -169,10 +169,10 @@ uint32_t kalman_filter(double measuredFreq, double dt) {
   state.P11 += state.Q_drift;
 
   if (state.ppsValid) {
-          if (freq_offset >= 10.0) { state.Q_pwm = 1e-4; state.Q_drift = 1e-6; }
-     else if (freq_offset >= 1.0)  { state.Q_pwm = 1e-5; state.Q_drift = 1e-6; }
-     else if (freq_offset >= 0.1)  { state.Q_pwm = 1e-6; state.Q_drift = 1e-7; }
-     else                          { state.Q_pwm = 1e-8; state.Q_drift = 1e-9; }
+          if (freq_offset >= 10.0) { state.Q_pwm = 1e-4; state.Q_drift = 1e-6;  }
+     else if (freq_offset >= 1.0)  { state.Q_pwm = 1e-5; state.Q_drift = 1e-6;  }
+     else if (freq_offset >= 0.1)  { state.Q_pwm = 1e-6; state.Q_drift = 1e-7;  }
+     else                          { state.Q_pwm = 1e-8; state.Q_drift = 1e-10; }
 
 
      // measurement
@@ -238,5 +238,5 @@ uint32_t kalman_filter(double measuredFreq, double dt) {
      }
 
   // 4. output
-  return (uint32_t) constrain(state.x_pwm, 0, 65535);
+  return (uint32_t) constrain(state.x_pwm + 0.5, 0, 65535);
 }
