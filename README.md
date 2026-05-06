@@ -50,7 +50,7 @@ Project goal is a ~~less than 100 bucks~~ small budget hobbyists GPS disciplined
 | 01:35:30    | 0.002            |    3       |   1.8489    | recover  |
 | 01:52:10    | 0.001            |    2       |   1.3932    |          |
 
-
+![Image](doc/tune_20260506.png)
 
 
 
