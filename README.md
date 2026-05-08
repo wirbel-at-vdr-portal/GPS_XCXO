@@ -1,5 +1,5 @@
 # About
-Project goal is a ~~less than 100 bucks~~ small budget hobbyists GPS disciplined 10MHz XCXO with less than 0.5Hz freq offset at 10MHz (i want less) using a cheap GPS receiver with 1PPS output.
+Project goal is a small budget hobbyists GPS disciplined 10MHz XCXO with less than 0.01Hz freq offset at 10MHz using a GPS receiver with 1PPS output.
 
 # Ingredients
 - an cheap 10MHz OCXO with 0..4 volts V_control input, which has in it's voltage control range the center freq of 10.000000 MHz and CMOS or TTL output,
