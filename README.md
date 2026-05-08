@@ -1,6 +1,9 @@
 # About
 Project goal is a small budget hobbyists GPS disciplined 10MHz XCXO with less than 0.01Hz freq offset at 10MHz using a GPS receiver with 1PPS output.
 
+![Image](doc/TFT_1.8.png)
+
+
 # Ingredients
 - an cheap 10MHz OCXO with 0..4 volts V_control input, which has in it's voltage control range the center freq of 10.000000 MHz and CMOS or TTL output,
   costs at common market places ~15€. I use an CTI OSC5A2B02 OCXO based board. It needs to be modified however, to have a control voltage input instead of a potentiometer.
