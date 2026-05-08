@@ -6,8 +6,9 @@ Project goal is a small budget hobbyists GPS disciplined 10MHz XCXO with less th
   costs at common market places ~15€. I use an CTI OSC5A2B02 OCXO based board. It needs to be modified however, to have a control voltage input instead of a potentiometer.
 - an ESP32 devkit C V4, ~12€ (mine was ~8€)
 - Arduino IDE with a few libs, 0€, but some efforts in/plus time/research.
-- a GPS module with an 1pps (pulse per second) digital signal output ~~, 12€. Mine has an SMT LED, which i use.~~
-  I switched to an Sparkfun GPS-17285 module, based on Neo-M9N, together with a Sparkfun GPS-14986 antenna. A bit expensive, but more fun.
+- a GPS module with an 1 pulse per second output, in my case
+  - Sparkfun GPS-17285 module (Neo-M9N)
+  - Sparkfun GPS-14986 antenna
 - a few electronic components
 - an old 1.8 inch TFT based on St7735, i use the one with the large SD card slot, ~6€
 - the PCB, design is here, ~25€ for 5 pieces.
