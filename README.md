@@ -19,12 +19,12 @@ Project goal is a small budget hobbyists GPS disciplined 10MHz XCXO with less th
 - the 10MHz signal is counted by the ESP32 specific hardware counter PCNT. Every 30000 counts, this counter fires a second ISR.
 - the counter overflows are counted. This is an important step, as no µC will fire 10*10^6 interrupts per second.
   With this solution, our ISR is called 333 times a second only.
-- if the gate time is over, ~~the counter is stopped (again by the 1PPS),~~ we calculate the number of pulses: pulses = current_counter + overflows * 30000 - last_counter
+- if the gate time is over, we remember the current counter value (0..29999) as 'last_counter' and calculate the number of pulses: pulses = current_counter + overflows * 30000 - last_counter
 - now, we can calculate the frequency: frequency = pulses / gate_time
-- and the current frequency error in ppm: errorPPM = (measuredFreq - TARGET_FREQ) / (TARGET_FREQ / 1e6)
+- and the current frequency error in ppb: errorPPB = (measuredFreq - TARGET_FREQ) / (TARGET_FREQ / 1e9)
 - as our OCXO is voltage controlled by 0..4volts, we need to generate a control voltage. We generate a 16-bit PWM, again using hardware counters of the ESP32.
 - the pwm signal is RC filtered, we need to put a bit effort in this filter. We want more than 120dB frequency suppression for the PWM frequency.
-- and finally, we somehow need to map an error in ppm to and PWM value. This job serves a digital filter with a bit brain, the Kalman filter.
+- and finally, we somehow need to map an error in ppb to an PWM value. This job serves a digital filter with a bit brain, the Kalman filter.
 
 # Performance
 - for my system, which is a very early breadboard-like assembly
