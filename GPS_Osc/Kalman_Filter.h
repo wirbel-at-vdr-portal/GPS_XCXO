@@ -102,10 +102,10 @@ struct KalmanGPSDO {
 
   // --- Process Noise Q (OCXO Stability) ---
   // Q defines how much uncertainty we add per second.
-  double Q_pwm   = 1e-6;      // Random walk of the OCXO frequency. 1e-4 (bad stability) .. 1e-9 (ultra precise, but slow)
-  double Q_drift = 1e-6;      // Instability of the aging/drift rate 1e-6 (warming up) .. 1e-10 (thermal not disturbed)
+  double Q_pwm;      // Random walk of the OCXO frequency. 1e-4 (bad stability) .. 1e-9 (ultra precise, but slow)
+  double Q_drift;    // Instability of the aging/drift rate 1e-6 (warming up) .. 1e-10 (thermal not disturbed)
 
-  double innovation;    // how large our last step was.
+  double innovation; // how large our last step was.
   bool ppsValid;
 };
 
@@ -122,6 +122,8 @@ KalmanGPSDO state = {
   .ppsValid = false,
 };
 
+KalmanGPSDO last_state;
+
 
 
 /* Our measure uncertainty is about 3 counts (0.3ppm). For one sec measurement time that
@@ -131,7 +133,7 @@ KalmanGPSDO state = {
 const double TARGET_FREQ = 10000000.0;
 const double PWM_PRO_PPM = 65535.0 / 4.0; 
 const double MEASUREMENT_ERROR_PWM = 0.1 * PWM_PRO_PPM; // 1 count error at 1s; ~1638
-const double MAX_DRIFT = 1e-4;
+const double MAX_DRIFT = 0.00007;
 
 
 
@@ -172,7 +174,7 @@ uint32_t kalman_filter(double measuredFreq, double dt) {
           if (freq_offset >= 10.0) { state.Q_pwm = 1e-4; state.Q_drift = 1e-6;  }
      else if (freq_offset >= 1.0)  { state.Q_pwm = 1e-5; state.Q_drift = 1e-6;  }
      else if (freq_offset >= 0.1)  { state.Q_pwm = 1e-6; state.Q_drift = 1e-7;  }
-     else                          { state.Q_pwm = 1e-8; state.Q_drift = 1e-10; }
+     else                          { state.Q_pwm = 1e-8; state.Q_drift = 1e-9;  }
 
 
      // measurement
@@ -227,7 +229,7 @@ uint32_t kalman_filter(double measuredFreq, double dt) {
      state.P11 -= K1 * P01_old;
 
      Serial.print("gate_time:");    Serial.print(dt,0);
-     Serial.print(",errorPPM:");    Serial.print(errorPPM, 6);
+     Serial.print(",errorPPB:");    Serial.print(errorPPM * 1000.0, 6);
      Serial.print(",measurement:"); Serial.print(measurement, 2);
      
      Serial.print(",Freq:");        Serial.print(measuredFreq, 3);

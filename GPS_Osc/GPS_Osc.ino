@@ -7,17 +7,17 @@
 #include <SPI.h>              // SPI(MOSI,SCK,SS) for ST7735 1.8 TFT display
 #include <Adafruit_GFX.h>     // display
 #include <Adafruit_ST7735.h>  // display
-//#include "driver/pcnt.h"
-#include "driver/pulse_cnt.h"   // PCNT is a 16bit hardware counter on ESP32
-#include "hal/pcnt_ll.h"
+#include "driver/pulse_cnt.h" // PCNT is a 16bit hardware counter on ESP32
+#include "hal/pcnt_ll.h"      // pcnt_ll_get_count()
 #include "Kalman_Filter.h"
 #include "esp32-hal-cpu.h"
-#include "soc/pcnt_reg.h"
+#include <Preferences.h>      // https://docs.espressif.com/projects/arduino-esp32/en/latest/tutorials/preferences.html
 
 // generic macros
 #define kHz(f) 1000ULL * (unsigned long long)f
 #define MHz(f) 1000ULL * kHz(f)
 #define ARRAY_SIZE(a)  ( sizeof(a)/sizeof(a[0]) )
+#define IN_RANGE(X, MINIMUM, MAXIMUM) (   ( (X) >= (MINIMUM) ) && ( (X) <= (MAXIMUM) )    )
 
 
 /* In the Arduino IDE, configure this board:
@@ -42,6 +42,7 @@
 uint64_t MAX_COUNTER = 30000; // less or equal 32767
 
 pcnt_unit_handle_t pcnt_unit = NULL;
+Preferences esp32_flash;
 
 // our 1.8 ST7735 based TFT, connected to hw  SPI
 Adafruit_ST7735 Display = Adafruit_ST7735(SS, DC, RST);
@@ -59,7 +60,7 @@ struct ISR_Data {
   uint32_t isr_duration;  // debug only.
 } __attribute__((aligned(4)));
 
-volatile ISR_Data isr_data = {0, 0, 0, 0, 0, 0};
+volatile ISR_Data isr_data = {10, 0, 0, 0, 0, 0};
 
 
 
@@ -68,11 +69,7 @@ uint32_t pwm_val;                    // PWM freq < (80*1000*1000)/2^Resolution; 
 uint32_t pwm_frequency = 1220;
 
 
-/* to count cpu clocks, we have a xtal counter available:
-uint32_t start = xthal_get_ccount();
-uint32_t end   = xthal_get_ccount();
-isr_duration = end - start;
-*/
+
 
 // ISR: triggered every MAX_COUNTER counts by PCNT
 static bool IRAM_ATTR OnOverflow(pcnt_unit_handle_t unit, const pcnt_watch_event_data_t* edata, void* user_ctx) {
@@ -126,7 +123,8 @@ void setup(void) {
   pcnt_unit_config_t unit_config = {
      .low_limit = -1,
      .high_limit = (int16_t)MAX_COUNTER,
-     //.flags = { .accum_count = true }
+     //.flags = { .accum_count = true },
+     .intr_priority = 3, // max ISR prio for C/C++
      };
   pcnt_new_unit(&unit_config, &pcnt_unit);
   pcnt_glitch_filter_config_t filter_config = {.max_glitch_ns = 13,}; // 13nsec. 1/80MHz = 12.5nsec
@@ -146,7 +144,15 @@ void setup(void) {
 
   // enable 1Hz ISR
   attachInterrupt(PPS_IN, OnPPS, RISING);
-  pwm_val = 65536UL >> 1;
+
+  esp32_flash.begin("Kalman", false);
+  state.x_pwm           = esp32_flash.getDouble("x_pwm"  , 32768.0);
+  state.x_drift         = esp32_flash.getDouble("x_drift", 0.0    );
+  state.P00             = esp32_flash.getDouble("P00"    , 100.0  );
+  state.P01 = state.P10 = esp32_flash.getDouble("P01"    , 0.0    );
+  state.P11             = esp32_flash.getDouble("P11"    , 1.0    );
+  last_state = state;
+  pwm_val = (uint32_t) constrain(state.x_pwm + 0.5, 0, 65535);
 
   if (not(ledcAttach(PWM_OUT, pwm_frequency, 16)))
      Serial.println("ledcAttach failed.");
@@ -159,53 +165,74 @@ void setup(void) {
 
 
 uint64_t pulses = 0;
-int16_t last_count; // if we store here the last count value, we dont need to reset the PCNT
+uint64_t last_count; // if we store here the last count value, we dont need to reset the PCNT
 double frequency;
+double last_frequency;
 double offset;
-double offset_ppm;
-int last_ticks = -1;
+double offset_ppb;
+int last_ticks = 10;
 int timeout = 0;
+uint32_t overflows32, count32;
 
+portMUX_TYPE myMux = portMUX_INITIALIZER_UNLOCKED;
 
 void loop() {
 
   if (isr_data.ready == 1) {
-     uint32_t overflows32, count32;
-     // ***** critical section begin: disable interrupts while copy value
-     noInterrupts();
+
+     portENTER_CRITICAL(&myMux);    // earlier: noInterrupts();
      count32     = isr_data.count;
      overflows32 = isr_data.overflows;
-     interrupts();
-     // ***** critical section end
      isr_data.ready = 0;
+     portEXIT_CRITICAL(&myMux);     // earlier: interrupts();
+
+
      pulses = overflows32 * MAX_COUNTER + count32; // MAX_COUNTER is uint64_t
      pulses -= last_count; // we did not start at zero anymore.
      last_count = count32;
 
-
-
      // we take up to (gate_time) secs samples and average
+     last_frequency = frequency;
      frequency = ((double) pulses) / gate_time;
      offset = frequency - FREQUENCY;
-     offset_ppm = (frequency - FREQUENCY) / (FREQUENCY / 1000000.0);
+     offset_ppb = (frequency - FREQUENCY) / (FREQUENCY / 1e9);
 
+     /* Note: we need to call the filter, even if the freq is fully off.
+      *       The filter checks the freq to be valid.
+      */
      pwm_val = kalman_filter(frequency, gate_time);
      ledcWrite(PWM_OUT, pwm_val);
 
-/*
-     Serial.print("Gate time: ");
-     Serial.print(gate_time);
-     Serial.println("s");
+     if (fabs(offset) > 20.0) {
+        Display.setTextSize(1);
+        Display.setCursor(10, 10);
+        Display.setTextColor(ST77XX_WHITE, ST77XX_BLACK);
+        Display.println("ACTUAL FREQUENCY (Hz)");
+        Display.setTextSize(2);
+        Display.setCursor(10, 25);
+        Display.setTextColor(ST77XX_RED, ST77XX_BLACK);
+        Display.print(last_frequency, 3); 
+        Display.print("              ");
+        Serial.print("gate_time:"); Serial.print(gate_time); Serial.println(",");
+        Serial.print("isr_data.ticks:"); Serial.print(isr_data.ticks); Serial.println(",");
+        Serial.print("count32:"); Serial.print(count32); Serial.println(",");
+        Serial.print("overflows32:"); Serial.print(overflows32); Serial.println(",");
+        Serial.print("frequency:"); Serial.print(frequency,3); Serial.println(" - Bad Freq !!");
+        isr_data.ticks = gate_time;
+        return;
+        }
 
-     Serial.print("Frequency: ");
-     Serial.print(frequency, 2); // 0.1Hz Auflösung sichtbar
-     Serial.println(" Hz            ");
+     Serial.print("pulses:"); Serial.print(pulses); Serial.print(",");
 
-     Serial.print("Offset: ");
-     Serial.print(offset);
-     Serial.println("Hz");
-*/
-
+     if ((fabs(offset) < 0.2) and (state.x_pwm != esp32_flash.getDouble("x_pwm", 32768.0))) {
+        Serial.println("saving state..");
+        last_state = state;
+        esp32_flash.putDouble("x_pwm", state.x_pwm);
+        esp32_flash.putDouble("x_drift", state.x_drift);
+        esp32_flash.putDouble("P00", state.P00);
+        esp32_flash.putDouble("P01", state.P01);
+        esp32_flash.putDouble("P11", state.P11);
+        }
 
      // --- TFT output ---
      Display.setRotation(1); // 1 = 160x128 (Landscape)
@@ -248,7 +275,7 @@ void loop() {
      Display.setTextColor(ST77XX_YELLOW, ST77XX_BLACK);
      if (gate_time < 10) Display.print(" ");
      Display.print(gate_time); Display.print("sec ");
-     Display.print(offset_ppm,3); Display.print("ppm ");
+     Display.print(offset_ppb,3); Display.print("ppb ");
      Display.print(pwm_val); Display.print("            ");
      }
   else {
@@ -261,7 +288,7 @@ void loop() {
         Display.setTextColor(ST77XX_YELLOW, ST77XX_BLACK);
         if (gate_time < 10) Display.print(" ");
         Display.print(isr_data.ticks+1); Display.print("sec ");
-        Display.print(offset_ppm,3); Display.print("ppm ");
+        Display.print(offset_ppb,3); Display.print("ppb ");
         Display.print(pwm_val); Display.print("            ");
         timeout = 0;
         }
@@ -280,14 +307,8 @@ void loop() {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
+/* to count cpu clocks, we have a xtal counter available:
+uint32_t start = xthal_get_ccount();
+uint32_t end   = xthal_get_ccount();
+isr_duration = end - start;
+*/
