@@ -16,9 +16,8 @@ Project goal is a small budget hobbyists GPS disciplined 10MHz XCXO with less th
 
 # How it is working
 - the 1PPS signal from the GNSS / GPS module triggers an interrupt routine, which resets a counter.
-- the 10MHz signal is counted by the ESP32 specific hardware counter PCNT. Every 30000 counts, this counter fires a second ISR.
-- the counter overflows are counted. This is an important step, as no µC will fire 10*10^6 interrupts per second.
-  With this solution, our ISR is called 333 times a second only.
+- the 10MHz signal is counted by the ESP32 specific hardware counter PCNT. Every 30000 counts, this counter fires a second ISR to count it's overflows.
+  This ISR is called 333 times a second.
 - if the gate time is over, we remember the current counter value (0..29999) as 'last_counter' and calculate the number of pulses: pulses = current_counter + overflows * 30000 - last_counter
 - now, we can calculate the frequency: frequency = pulses / gate_time
 - and the current frequency error in ppb: errorPPB = (measuredFreq - TARGET_FREQ) / (TARGET_FREQ / 1e9)
