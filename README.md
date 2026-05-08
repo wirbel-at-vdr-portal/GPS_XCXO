@@ -27,6 +27,7 @@ Project goal is a small budget hobbyists GPS disciplined 10MHz XCXO with less th
 - as our OCXO is voltage controlled by 0..4volts, we need to generate a control voltage. We generate a 16-bit PWM, again using hardware counters of the ESP32.
 - the pwm signal is RC filtered, we need to put a bit effort in this filter. We want more than 120dB frequency suppression for the PWM frequency.
 - and finally, we somehow need to map an error in ppb to an PWM value. This job serves a digital filter with a bit brain, the Kalman filter.
+- if the OCXO is learned, the program stores from time to time the current state
 
 # Performance
 - for my system, which is a very early breadboard-like assembly
