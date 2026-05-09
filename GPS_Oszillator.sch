@@ -326,8 +326,8 @@
 <devices>
 <device name="" package="POWERBUCHSE">
 <connects>
-<connect gate="G$1" pin="1" pad="1"/>
-<connect gate="G$1" pin="2" pad="2"/>
+<connect gate="G$1" pin="1" pad="2"/>
+<connect gate="G$1" pin="2" pad="1"/>
 <connect gate="G$1" pin="3" pad="3"/>
 </connects>
 <technologies>
