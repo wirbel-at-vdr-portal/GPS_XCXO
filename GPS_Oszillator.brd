@@ -1552,7 +1552,7 @@ distributor RS 193-8855</description>
 <circle x="0" y="0" radius="0.3" width="1.016" layer="51"/>
 <circle x="0" y="0" radius="3.3" width="0.2032" layer="51"/>
 <circle x="0" y="0" radius="2.1024" width="0.2032" layer="21"/>
-<pad name="1" x="0" y="0" drill="1.1"/>
+<pad name="1" x="0" y="0" drill="1.4"/>
 <pad name="2" x="-2.54" y="2.54" drill="1.4"/>
 <pad name="3" x="2.54" y="2.54" drill="1.4"/>
 <pad name="4" x="2.54" y="-2.54" drill="1.4"/>
