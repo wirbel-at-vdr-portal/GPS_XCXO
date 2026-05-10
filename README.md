@@ -3,6 +3,8 @@ Project goal is a small budget hobbyists GPS disciplined 10MHz XCXO with less th
 
 ![Image](doc/TFT_1.8.png)
 
+![Image](doc/prototype.png)
+
 
 # Ingredients
 - an cheap 10MHz OCXO with 0..4 volts V_control input, which has in it's voltage control range the center freq of 10.000000 MHz and CMOS or TTL output,
