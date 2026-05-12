@@ -67,7 +67,7 @@ volatile ISR_Data isr_data = {10, 0, 0, 0, 0, 0};
 int gate_time = 10;                  // time for smoothing, up to 100, may be later larger.
 uint32_t pwm_val;                    // PWM freq < (80*1000*1000)/2^Resolution; 1220Hz for 16bit.
 uint32_t pwm_frequency = 1220;
-
+double saved_pwm;
 
 
 
@@ -159,7 +159,7 @@ void setup(void) {
   else {
      pwm_frequency = ledcReadFreq(PWM_OUT);
      Serial.print("PWM started, freq = "); Serial.println(pwm_frequency);
-     ledcWrite(PWM_OUT, pwm_val);
+     ledcWrite(PWM_OUT, 65535 - pwm_val);
      }
 }
 
@@ -201,7 +201,7 @@ void loop() {
       *       The filter checks the freq to be valid.
       */
      pwm_val = kalman_filter(frequency, gate_time);
-     ledcWrite(PWM_OUT, pwm_val);
+     ledcWrite(PWM_OUT, 65535 - pwm_val);
 
      if (fabs(offset) > 20.0) {
         Display.setTextSize(1);
@@ -224,7 +224,7 @@ void loop() {
 
      Serial.print("pulses:"); Serial.print(pulses); Serial.print(",");
 
-     if ((fabs(offset) < 0.2) and (state.x_pwm != esp32_flash.getDouble("x_pwm", 32768.0))) {
+     if ((fabs(offset) < 0.1) and (fabs(state.x_pwm - last_state.x_pwm) > 1.0)) {
         Serial.println("saving state..");
         last_state = state;
         esp32_flash.putDouble("x_pwm", state.x_pwm);
