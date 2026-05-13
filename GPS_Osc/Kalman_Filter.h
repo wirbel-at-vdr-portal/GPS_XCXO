@@ -232,7 +232,7 @@ uint32_t kalman_filter(double measuredFreq, double dt) {
      Serial.print(",errorPPB:");    Serial.print(errorPPM * 1000.0, 6);
      Serial.print(",measurement:"); Serial.print(measurement, 2);
      
-     Serial.print(",Freq:");        Serial.print(measuredFreq, 3);
+     Serial.print(",Freq:");        Serial.print(measuredFreq, 4);
      Serial.print(",PWM:");         Serial.print(state.x_pwm, 2);
      Serial.print(",Drift:");       Serial.print(state.x_drift, 6);
      Serial.print(",Innovation:");  Serial.print(state.innovation, 4);

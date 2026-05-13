@@ -67,7 +67,6 @@ volatile ISR_Data isr_data = {10, 0, 0, 0, 0, 0};
 int gate_time = 10;                  // time for smoothing, up to 100, may be later larger.
 uint32_t pwm_val;                    // PWM freq < (80*1000*1000)/2^Resolution; 1220Hz for 16bit.
 uint32_t pwm_frequency = 1220;
-double saved_pwm;
 
 
 
@@ -174,6 +173,10 @@ int last_ticks = 10;
 int timeout = 0;
 uint32_t overflows32, count32;
 
+double last_freqs[4];
+bool last_valid[4];
+
+
 portMUX_TYPE myMux = portMUX_INITIALIZER_UNLOCKED;
 
 void loop() {
@@ -195,12 +198,36 @@ void loop() {
      last_frequency = frequency;
      frequency = ((double) pulses) / gate_time;
      offset = frequency - FREQUENCY;
+
+
+     last_freqs[3] = last_freqs[2]; last_valid[3] = last_valid[2];
+     last_freqs[2] = last_freqs[1]; last_valid[2] = last_valid[1];
+     last_freqs[1] = last_freqs[0]; last_valid[1] = last_valid[0];
+     last_freqs[0] = frequency;     last_valid[0] = (fabs(offset) < 0.003) and (gate_time >= 1000);
+
+     double samples = 1.0;
+     if (last_valid[0]) {
+        if (last_valid[1]) {
+           frequency += last_freqs[1];
+           samples = 2.0;
+           if (last_valid[2]) {
+              frequency += last_freqs[2];
+              samples = 3.0;
+              if (last_valid[3]) {
+                 frequency += last_freqs[3];
+                 samples = 4.0;
+                 }
+              }
+           frequency /= samples;
+           offset = frequency - FREQUENCY;
+           }
+        }
+      /* Note: we need to call the filter, even if the freq is fully off.
+       *       The filter checks the freq to be valid.
+       */
+     pwm_val = kalman_filter(frequency, gate_time);
      offset_ppb = (frequency - FREQUENCY) / (FREQUENCY / 1e9);
 
-     /* Note: we need to call the filter, even if the freq is fully off.
-      *       The filter checks the freq to be valid.
-      */
-     pwm_val = kalman_filter(frequency, gate_time);
      ledcWrite(PWM_OUT, 65535 - pwm_val);
 
      if (fabs(offset) > 20.0) {
