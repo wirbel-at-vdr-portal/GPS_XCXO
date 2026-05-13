@@ -285,7 +285,7 @@ void loop() {
      Display.setCursor(10, 75);
      Display.setTextColor((abs(offset) < 1.0) ? ST77XX_CYAN : ST77XX_RED, ST77XX_BLACK);   
      if (offset >= 0) Display.print("+");
-     Display.print(offset, 3);
+     Display.print(offset, 4);
      Display.print("Hz      ");
 
 
