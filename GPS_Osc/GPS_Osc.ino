@@ -98,10 +98,14 @@ void setup(void) {
   Serial.begin(115200);
   delay(1000);
 
-  Display.setRotation(1);
   Display.initR(INITR_BLACKTAB);    // Init ST7735S chip, black tab
   Display.fillScreen(ST77XX_BLACK);
   Display.setTextColor(ST77XX_WHITE);
+  Display.setRotation(1);
+  Display.setTextSize(2);
+  Display.setCursor(10, 25);
+  Display.setTextColor(ST77XX_GREEN, ST77XX_BLACK);
+  Display.println("Waiting..");
 
   pinMode(OSC_IN, INPUT);
   pinMode(PPS_IN, INPUT);
@@ -322,6 +326,7 @@ void loop() {
      else
         timeout++;
      if (timeout % 100 > 95) {
+        Display.setRotation(1);
         Display.fillScreen(ST77XX_BLACK);
         Display.setTextSize(2);
         Display.setCursor(10, 25);
