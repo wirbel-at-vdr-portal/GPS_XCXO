@@ -20,6 +20,7 @@ Project goal is a small budget hobbyists GPS disciplined 10MHz XCXO with less th
 - a 9..12volts DC power supply with ~1amp continously, - no costs. Everybody has such one laying around. Preferred with the 5.5mm 'DC connector', plus is inner.
 
 # How it is working
+![Image](doc/overview.png)
 - the 1PPS signal from the GNSS / GPS module triggers an interrupt routine, which resets a counter.
 - the 10MHz signal is counted by the ESP32 specific hardware counter PCNT. Every 30000 counts, this counter fires a second ISR to count it's overflows.
   This ISR is called 333 times a second.
