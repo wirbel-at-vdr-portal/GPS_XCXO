@@ -31,6 +31,14 @@ Project goal is a small budget hobbyists GPS disciplined 10MHz XCXO with less th
 - and finally, we somehow need to map an error in ppb to an PWM value. This job serves a digital filter with a bit brain, the Kalman filter.
 - if the OCXO is learned, the program stores from time to time the current state
 
+# Modification of the OCXO board
+My OCXO board doesnt have a control voltage input. Instead, the input is wired to a potentiometer. The modified circuit is shown below.
+
+NOTE: the original schematic was not done by me, see doc folder for original.
+
+![Image](doc/OSC5A2B02-10MHz-OCXO-REV_0_0_3_modified.png)
+
+
 # Performance
 - for my system, which is a very early breadboard-like assembly
 - the algorithm needs time to adapt the OCXO, learn it's properties, so it's slow. Don't expect good results in less than two hours.
